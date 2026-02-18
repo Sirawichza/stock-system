@@ -149,8 +149,11 @@ tr:hover{
 
 <div style="margin-top:10px;">
 
-    <form action="/import/{{warehouse}}" method="POST"
-          enctype="multipart/form-data" style="display:inline;">
+    <form action="{{ url_for('import_excel', warehouse=warehouse) }}"
+      method="POST"
+      enctype="multipart/form-data"
+      style="display:inline;">
+
         <input type="file" name="file" required>
         <button class="btn btn-blue">Import</button>
     </form>
