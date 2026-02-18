@@ -293,16 +293,6 @@ def export_excel(warehouse):
 
     return send_file(file_path, as_attachment=True)
 
-# -------- DEBUG -------- #
-
-@app.route("/debug")
-def debug():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT warehouse, COUNT(*) FROM products GROUP BY warehouse")
-    rows = c.fetchall()
-    conn.close()
-    return str(rows)
 
 
 
