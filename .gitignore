@@ -1,0 +1,4 @@
+database.db
+warehouse.db
+__pycache__/
+uploads/

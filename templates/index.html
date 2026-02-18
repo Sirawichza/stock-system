@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Warehouse List</title>
+</head>
+<body>
+
+<h2>Add Warehouse</h2>
+<form method="POST" action="/add_warehouse">
+<input type="text" name="name" required>
+<button type="submit">Add</button>
+</form>
+
+<h2>Warehouse List</h2>
+<ul>
+{% for w in warehouses %}
+<li><a href="/warehouse/{{ w[0] }}">{{ w[0] }}</a></li>
+{% endfor %}
+</ul>
+
+</body>
+</html>

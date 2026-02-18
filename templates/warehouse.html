@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Haier Warehouse Scanner System</title>
+
+<style>
+body{
+    margin:0;
+    font-family:Segoe UI, Arial;
+    background:#dfe3e8;
+}
+.topbar{
+    background:#0b5fa5;
+    color:white;
+    padding:12px 20px;
+    display:flex;
+    align-items:center;
+}
+.logo{
+    font-size:34px;
+    font-weight:bold;
+    margin-right:20px;
+}
+.company{
+    font-size:16px;
+}
+.main{
+    display:flex;
+    padding:20px;
+}
+.left{
+    width:380px;
+}
+.card{
+    background:#efefef;
+    padding:20px;
+    margin-bottom:20px;
+    border:1px solid #bcbcbc;
+}
+select{
+    width:100%;
+    padding:8px;
+    margin-top:10px;
+    font-size:14px;
+}
+input[type=text]{
+    width:100%;
+    padding:10px;
+    font-size:16px;
+    margin-top:10px;
+    border:1px solid #aaa;
+}
+.readonly{
+    background:#d9dee5;
+}
+.btn{
+    padding:8px 14px;
+    border:none;
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
+    margin-right:10px;
+}
+.btn-blue{ background:#148ea1; }
+.btn-red{ background:#d62f2f; }
+.btn-green{ background:#2ea043; }
+.btn-add{ background:#2f5bd6; width:100%; margin-top:10px; }
+.right{
+    flex:1;
+    background:#efefef;
+    padding:10px;
+    border:1px solid #bcbcbc;
+    height:650px;
+    overflow:auto;
+}
+table{
+    width:100%;
+    border-collapse:collapse;
+    background:white;
+}
+th,td{
+    border:1px solid #ccc;
+    padding:6px;
+    text-align:center;
+    font-size:13px;
+}
+th{
+    background:#d0d5db;
+    font-weight:bold;
+}
+tr:hover{
+    background:#f1f7ff;
+}
+.complete{
+    background:#c6f6c6 !important;
+}
+.over{
+    background:#ffc9c9 !important;
+}
+.selected{
+    background:#ffd966 !important;
+}
+</style>
+</head>
+
+<body>
+
+<div class="topbar">
+    <div class="logo">Haier</div>
+    <div class="company">
+        บริษัท ไฮเออร์ อีเล็คทริค (ประเทศไทย) จำกัด (มหาชน)
+    </div>
+</div>
+
+<div class="main">
+
+<div class="left">
+
+<div class="card">
+    <b>Select Warehouse</b>
+    <form action="/" method="GET">
+        <select onchange="location.href='/warehouse/'+this.value">
+            {% for w in warehouses %}
+            <option value="{{w}}" {% if w==warehouse %}selected{% endif %}>
+                {{w}}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+
+    <br><br>
+    <input type="text" id="newWarehouse" placeholder="New Warehouse">
+    <button class="btn btn-add" onclick="addWarehouse()">Add Warehouse</button>
+</div>
+
+<div class="card">
+    <b>Original Model Code</b>
+    <input type="text" id="barcode" autofocus>
+
+    <br><br>
+    <b>Model Code (9 digit)</b>
+    <input type="text" id="model" class="readonly" readonly>
+
+    <br><br>
+    <b>Select Location</b>
+    <input type="text" id="scanLocation">
+</div>
+
+<div style="margin-top:10px;">
+
+    <form action="/import/{{warehouse}}" method="POST"
+          enctype="multipart/form-data" style="display:inline;">
+        <input type="file" name="file" required>
+        <button class="btn btn-blue">Import</button>
+    </form>
+
+    <button class="btn btn-red" onclick="deleteSelected()">
+        Delete Selected
+    </button>
+
+    <button class="btn btn-green"
+        onclick="window.location='/export/{{warehouse}}'">
+        Export Excel
+    </button>
+
+</div>
+</div>
+
+<div class="right">
+
+<table id="productTable">
+<thead>
+<tr>
+<th>NO.</th>
+<th>Location</th>
+<th>Model Code</th>
+<th>Product description</th>
+<th>Inv.Qty</th>
+<th>Act.Qty</th>
+</tr>
+</thead>
+
+<tbody>
+{% for p in products %}
+<tr data-id="{{p[0]}}"
+    data-model="{{p[2]}}"
+    data-location="{{p[1]}}">
+<td>{{loop.index}}</td>
+<td>{{p[1]}}</td>
+<td>{{p[2]}}</td>
+<td>{{p[3]}}</td>
+<td class="inv">{{p[4]}}</td>
+<td class="act">{{p[5]}}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+
+</div>
+</div>
+
+<script>
+
+let scannedBarcodes = new Set();
+
+document.addEventListener("DOMContentLoaded", function(){
+
+    const barcodeInput = document.getElementById("barcode");
+    const modelInput   = document.getElementById("model");
+
+    barcodeInput.addEventListener("keydown", function(e){
+
+        if(e.key === "Enter"){
+
+            e.preventDefault();
+
+            let fullCode = barcodeInput.value.trim().toUpperCase();
+
+            if(fullCode.length < 9){
+                barcodeInput.value="";
+                return;
+            }
+
+            if(scannedBarcodes.has(fullCode)){
+                alert("Barcode ซ้ำ: " + fullCode);
+                barcodeInput.value="";
+                return;
+            }
+
+            let scanLocation =
+                document.getElementById("scanLocation")
+                .value.trim().toUpperCase();
+
+            if(scanLocation===""){
+                alert("กรุณาใส่ Location ก่อนสแกน");
+                barcodeInput.value="";
+                return;
+            }
+
+            let modelCode = fullCode.substring(0,9);
+            modelInput.value = modelCode;
+
+            let row = document.querySelector(
+                "tr[data-model='"+modelCode+"'][data-location='"+scanLocation+"']"
+            );
+
+            if(!row){
+                alert("ไม่พบ Model นี้ใน Location ที่เลือก");
+                barcodeInput.value="";
+                return;
+            }
+
+            // 🔥 บันทึกลงฐานข้อมูลจริง
+            fetch("/scan", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: "barcode=" + fullCode + "&warehouse={{warehouse}}"
+            })
+            .then(res => res.json())
+            .then(data => {
+
+                if(data.status === "success"){
+
+                    scannedBarcodes.add(fullCode);
+
+                    let actCell = row.querySelector(".act");
+                    let invCell = row.querySelector(".inv");
+
+                    let act = parseInt(actCell.innerText)||0;
+                    let inv = parseInt(invCell.innerText)||0;
+
+                    act++;
+                    actCell.innerText = act;
+
+                    row.classList.remove("complete","over");
+
+                    if(act===inv) row.classList.add("complete");
+                    if(act>inv)   row.classList.add("over");
+
+                }
+                else if(data.status === "duplicate"){
+                    alert("Barcode นี้ถูกสแกนแล้วในระบบ");
+                }
+                else{
+                    alert("ไม่พบข้อมูลในระบบ");
+                }
+
+                barcodeInput.value="";
+                barcodeInput.focus();
+
+            })
+            .catch(()=>{
+                alert("เกิดข้อผิดพลาดในการบันทึก");
+                barcodeInput.value="";
+                barcodeInput.focus();
+            });
+
+        }
+
+    });
+
+});
+
+function addWarehouse(){
+
+    let name=document.getElementById("newWarehouse")
+              .value.trim();
+
+    if(name===""){
+        alert("กรุณาใส่ชื่อ Warehouse");
+        return;
+    }
+
+    fetch("/add_warehouse",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json"
+        },
+        body:JSON.stringify({name:name})
+    })
+    .then(res=>res.json())
+    .then(data=>{
+        if(data.success){
+            alert("เพิ่ม Warehouse สำเร็จ");
+            location.reload();
+        }else{
+            alert("เพิ่มไม่สำเร็จ");
+        }
+    });
+}
+
+function deleteSelected(){
+
+    let rows=document.querySelectorAll("tr.selected");
+
+    if(rows.length===0){
+        alert("No rows selected");
+        return;
+    }
+
+    let ids=[];
+
+    rows.forEach(r=>{
+        ids.push(r.getAttribute("data-id"));
+    });
+
+    fetch("/delete_selected",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json"
+        },
+        body:JSON.stringify({ids:ids})
+    })
+    .then(()=>location.reload());
+}
+
+</script>
+
+</body>
+</html>
