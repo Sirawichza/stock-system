@@ -297,7 +297,7 @@ def export_excel(warehouse):
 # ---------------- RUN ---------------- #
 
 # เรียกสร้าง table ทุกครั้งที่ app start
-init_db()
+#init_db()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
