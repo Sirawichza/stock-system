@@ -102,7 +102,7 @@ def index():
 
     if not warehouses:
         return render_template(
-            "Warehouse.html",
+            "warehouse.html",
             warehouses=[],
             warehouse="",
             products=[]
@@ -140,7 +140,7 @@ def warehouse_page(warehouse):
     products = get_products(warehouse)
 
     return render_template(
-        "Warehouse.html",
+        "warehouse.html",
         warehouses=warehouses,
         warehouse=warehouse,
         products=products
