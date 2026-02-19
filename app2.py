@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, send_file, jsonify
-import sqlite3
+
 from openpyxl import load_workbook, Workbook
 import os
 import psycopg2
@@ -7,7 +7,9 @@ from urllib.parse import urlparse
 
 app = Flask(__name__)
 
-DB_NAME = "database.db"
+with app.app_context():
+    init_db()
+
 UPLOAD_FOLDER = "uploads"
 
 if not os.path.exists(UPLOAD_FOLDER):
@@ -19,20 +21,20 @@ if not os.path.exists(UPLOAD_FOLDER):
 def get_connection():
     database_url = os.environ.get("DATABASE_URL")
 
-    if database_url:
-        # ใช้ PostgreSQL บน Render
-        result = urlparse(database_url)
-        conn = psycopg2.connect(
-            database=result.path[1:],
-            user=result.username,
-            password=result.password,
-            host=result.hostname,
-            port=result.port
-        )
-        return conn
-    else:
-        # ใช้ SQLite ตอนรันในเครื่อง
-        return sqlite3.connect(DB_NAME)
+    if not database_url:
+        raise Exception("DATABASE_URL not set")
+
+    result = urlparse(database_url)
+
+    return psycopg2.connect(
+        database=result.path[1:],
+        user=result.username,
+        password=result.password,
+        host=result.hostname,
+        port=result.port
+    )
+
+    
 
 
 def init_db():
