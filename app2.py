@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, send_file, jsonify
 from openpyxl import load_workbook, Workbook
 import os
 import psycopg2
+from psycopg2 import pool
 from urllib.parse import urlparse
 
 app = Flask(__name__)
@@ -12,9 +13,17 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 
-# ---------------- DB ---------------- #
+# ---------------- DB (FIX ALL HERE) ---------------- #
 
-def get_connection():
+db_pool = None
+
+
+def init_pool():
+    global db_pool
+
+    if db_pool:
+        return
+
     database_url = os.environ.get("DATABASE_URL")
 
     if not database_url:
@@ -22,15 +31,26 @@ def get_connection():
 
     result = urlparse(database_url)
 
-    return psycopg2.connect(
+    db_pool = psycopg2.pool.SimpleConnectionPool(
+        1, 10,
         database=result.path[1:],
         user=result.username,
         password=result.password,
         host=result.hostname,
         port=result.port,
-        connect_timeout=5,
         sslmode="require"
     )
+
+
+def get_connection():
+    if not db_pool:
+        init_pool()
+    return db_pool.getconn()
+
+
+def release_connection(conn):
+    if db_pool and conn:
+        db_pool.putconn(conn)
 
 
 def init_db():
@@ -66,17 +86,11 @@ def init_db():
     """)
 
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
-# ✅ FIX: แค่ wake DB ไม่ต้อง init ทุกครั้ง
-@app.before_request
-def before_request():
-    try:
-        conn = get_connection()
-        conn.close()
-    except Exception as e:
-        print("DB WAKE ERROR:", e)
+# ❌ ลบ before_request ทิ้ง (ตัวพัง)
+# ❌ ไม่ต้อง wake DB แล้ว
 
 
 # ✅ กัน cache ค้าง
@@ -89,19 +103,22 @@ def add_header(response):
 # ---------------- FUNCTIONS ---------------- #
 
 def get_warehouses():
+    conn = None
     try:
         conn = get_connection()
         c = conn.cursor()
         c.execute("SELECT name FROM warehouses ORDER BY name")
         rows = c.fetchall()
-        conn.close()
         return [r[0] for r in rows]
     except Exception as e:
         print("GET WAREHOUSE ERROR:", e)
         return []
+    finally:
+        release_connection(conn)
 
 
 def get_products(warehouse):
+    conn = None
     try:
         conn = get_connection()
         c = conn.cursor()
@@ -110,12 +127,12 @@ def get_products(warehouse):
             FROM products
             WHERE warehouse=%s
         """, (warehouse,))
-        rows = c.fetchall()
-        conn.close()
-        return rows
+        return c.fetchall()
     except Exception as e:
         print("GET PRODUCT ERROR:", e)
         return []
+    finally:
+        release_connection(conn)
 
 
 # ---------------- ROUTES ---------------- #
@@ -132,22 +149,25 @@ def index():
 
 @app.route("/add_warehouse", methods=["POST"])
 def add_warehouse():
-    data = request.get_json()
-    name = data.get("name")
-
-    if not name:
-        return jsonify({"success": False})
-
+    conn = None
     try:
+        data = request.get_json()
+        name = data.get("name")
+
+        if not name:
+            return jsonify({"success": False})
+
         conn = get_connection()
         c = conn.cursor()
         c.execute("INSERT INTO warehouses (name) VALUES (%s)", (name,))
         conn.commit()
-        conn.close()
+
         return jsonify({"success": True})
     except Exception as e:
         print("ADD ERROR:", e)
         return jsonify({"success": False})
+    finally:
+        release_connection(conn)
 
 
 @app.route("/warehouse/<warehouse>")
@@ -171,6 +191,7 @@ def warehouse_page(warehouse):
 
 @app.route("/import/<warehouse>", methods=["POST"])
 def import_excel(warehouse):
+    conn = None
     try:
         file = request.files["file"]
         path = os.path.join(UPLOAD_FOLDER, file.filename)
@@ -195,19 +216,21 @@ def import_excel(warehouse):
             """, (warehouse, location, model, description, inv_qty))
 
         conn.commit()
-        conn.close()
 
         return redirect(f"/warehouse/{warehouse}")
 
     except Exception as e:
         print("IMPORT ERROR:", e)
         return "IMPORT FAIL"
+    finally:
+        release_connection(conn)
 
 
 # -------- SCAN -------- #
 
 @app.route("/scan", methods=["POST"])
 def scan():
+    conn = None
     try:
         barcode = request.form.get("barcode")
         warehouse = request.form.get("warehouse")
@@ -229,7 +252,6 @@ def scan():
         row = cur.fetchone()
 
         if not row:
-            conn.close()
             return jsonify({"status": "not_found"})
 
         product_id, act = row
@@ -239,9 +261,7 @@ def scan():
                 INSERT INTO scans (full_barcode, warehouse)
                 VALUES (%s,%s)
             """, (barcode, warehouse))
-        except Exception as e:
-            conn.close()
-            print("SCAN INSERT ERROR:", e)
+        except Exception:
             return jsonify({"status": "duplicate"})
 
         new_act = act + 1
@@ -253,19 +273,21 @@ def scan():
         """, (new_act, product_id))
 
         conn.commit()
-        conn.close()
 
         return jsonify({"status": "success"})
 
     except Exception as e:
         print("SCAN ERROR:", e)
         return jsonify({"status": "error"})
+    finally:
+        release_connection(conn)
 
 
 # -------- DELETE -------- #
 
 @app.route("/delete_selected", methods=["POST"])
 def delete_selected():
+    conn = None
     try:
         data = request.get_json()
         ids = data.get("ids", [])
@@ -284,19 +306,21 @@ def delete_selected():
         )
 
         conn.commit()
-        conn.close()
 
         return "OK"
 
     except Exception as e:
         print("DELETE ERROR:", e)
         return "ERROR"
+    finally:
+        release_connection(conn)
 
 
 # -------- EXPORT -------- #
 
 @app.route("/export/<warehouse>")
 def export_excel(warehouse):
+    conn = None
     try:
         conn = get_connection()
         c = conn.cursor()
@@ -307,7 +331,6 @@ def export_excel(warehouse):
         """, (warehouse,))
 
         rows = c.fetchall()
-        conn.close()
 
         wb = Workbook()
         ws = wb.active
@@ -325,11 +348,15 @@ def export_excel(warehouse):
     except Exception as e:
         print("EXPORT ERROR:", e)
         return "EXPORT FAIL"
+    finally:
+        release_connection(conn)
 
 
 # ---------------- RUN ---------------- #
 
+init_pool()
+init_db()
+
 if __name__ == "__main__":
-    init_db()  # ✅ รันครั้งเดียวพอ
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
