@@ -7,6 +7,14 @@ from urllib.parse import urlparse
 
 app = Flask(__name__)
 
+@app.before_first_request
+def startup():
+    global db_pool
+    if db_pool is None:
+        print("INIT DB POOL...")
+        init_pool()
+        init_db()
+
 UPLOAD_FOLDER = "uploads"
 
 if not os.path.exists(UPLOAD_FOLDER):
@@ -37,7 +45,11 @@ def init_pool():
 
 
 def get_connection():
+    global db_pool
+    if db_pool is None:
+        init_pool()
     return db_pool.getconn()
+
 
 
 def release_connection(conn):
