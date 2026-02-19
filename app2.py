@@ -2,18 +2,15 @@ from flask import Flask, render_template, request, redirect, send_file, jsonify
 from openpyxl import load_workbook, Workbook
 import os
 import psycopg2
-from psycopg2 import pool
+from psycopg2 import pool, OperationalError
 from urllib.parse import urlparse
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-
-
-# ---------------- DB (FIX ALL HERE) ---------------- #
+# ================= DB ================= #
 
 db_pool = None
 
@@ -25,7 +22,6 @@ def init_pool():
         return
 
     database_url = os.environ.get("DATABASE_URL")
-
     if not database_url:
         raise Exception("DATABASE_URL not set")
 
@@ -38,77 +34,90 @@ def init_pool():
         password=result.password,
         host=result.hostname,
         port=result.port,
-        sslmode="require"
+        sslmode="require",
+        connect_timeout=5
     )
 
 
 def get_connection():
+    global db_pool
+
     if not db_pool:
         init_pool()
-    return db_pool.getconn()
+
+    try:
+        conn = db_pool.getconn()
+        conn.autocommit = False
+        return conn
+    except OperationalError:
+        # 🔥 reconnect ถ้า DB หลุด
+        db_pool = None
+        init_pool()
+        return db_pool.getconn()
 
 
 def release_connection(conn):
-    if db_pool and conn:
-        db_pool.putconn(conn)
+    try:
+        if conn:
+            conn.rollback()
+            db_pool.putconn(conn)
+    except:
+        pass
 
 
 def init_db():
     conn = get_connection()
-    c = conn.cursor()
+    try:
+        with conn.cursor() as c:
+            c.execute("""
+            CREATE TABLE IF NOT EXISTS warehouses (
+                id SERIAL PRIMARY KEY,
+                name TEXT UNIQUE
+            )
+            """)
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS warehouses (
-        id SERIAL PRIMARY KEY,
-        name TEXT UNIQUE
-    )
-    """)
+            c.execute("""
+            CREATE TABLE IF NOT EXISTS products (
+                id SERIAL PRIMARY KEY,
+                warehouse TEXT,
+                location TEXT,
+                model TEXT,
+                description TEXT,
+                inv_qty INTEGER,
+                act_qty INTEGER DEFAULT 0
+            )
+            """)
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS products (
-        id SERIAL PRIMARY KEY,
-        warehouse TEXT,
-        location TEXT,
-        model TEXT,
-        description TEXT,
-        inv_qty INTEGER,
-        act_qty INTEGER DEFAULT 0
-    )
-    """)
-
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS scans (
-        id SERIAL PRIMARY KEY,
-        full_barcode TEXT,
-        warehouse TEXT,
-        UNIQUE(full_barcode, warehouse)
-    )
-    """)
-
-    conn.commit()
-    release_connection(conn)
-
-
-# ❌ ลบ before_request ทิ้ง (ตัวพัง)
-# ❌ ไม่ต้อง wake DB แล้ว
+            c.execute("""
+            CREATE TABLE IF NOT EXISTS scans (
+                id SERIAL PRIMARY KEY,
+                full_barcode TEXT,
+                warehouse TEXT,
+                UNIQUE(full_barcode, warehouse)
+            )
+            """)
+        conn.commit()
+    finally:
+        release_connection(conn)
 
 
-# ✅ กัน cache ค้าง
+# ================= NO CACHE ================= #
+
 @app.after_request
 def add_header(response):
     response.headers["Cache-Control"] = "no-store"
     return response
 
 
-# ---------------- FUNCTIONS ---------------- #
+# ================= FUNCTIONS ================= #
 
 def get_warehouses():
     conn = None
     try:
         conn = get_connection()
-        c = conn.cursor()
-        c.execute("SELECT name FROM warehouses ORDER BY name")
-        rows = c.fetchall()
+        with conn.cursor() as c:
+            c.execute("SELECT name FROM warehouses ORDER BY name")
+            rows = c.fetchall()
         return [r[0] for r in rows]
     except Exception as e:
         print("GET WAREHOUSE ERROR:", e)
@@ -121,13 +130,14 @@ def get_products(warehouse):
     conn = None
     try:
         conn = get_connection()
-        c = conn.cursor()
-        c.execute("""
-            SELECT id, location, model, description, inv_qty, act_qty
-            FROM products
-            WHERE warehouse=%s
-        """, (warehouse,))
-        return c.fetchall()
+        with conn.cursor() as c:
+            c.execute("""
+                SELECT id, location, model, description, inv_qty, act_qty
+                FROM products
+                WHERE warehouse=%s
+            """, (warehouse,))
+            rows = c.fetchall()
+        return rows
     except Exception as e:
         print("GET PRODUCT ERROR:", e)
         return []
@@ -135,7 +145,7 @@ def get_products(warehouse):
         release_connection(conn)
 
 
-# ---------------- ROUTES ---------------- #
+# ================= ROUTES ================= #
 
 @app.route("/")
 def index():
@@ -158,8 +168,8 @@ def add_warehouse():
             return jsonify({"success": False})
 
         conn = get_connection()
-        c = conn.cursor()
-        c.execute("INSERT INTO warehouses (name) VALUES (%s)", (name,))
+        with conn.cursor() as c:
+            c.execute("INSERT INTO warehouses (name) VALUES (%s)", (name,))
         conn.commit()
 
         return jsonify({"success": True})
@@ -187,7 +197,7 @@ def warehouse_page(warehouse):
         return "ERROR PAGE"
 
 
-# -------- IMPORT EXCEL -------- #
+# ================= IMPORT ================= #
 
 @app.route("/import/<warehouse>", methods=["POST"])
 def import_excel(warehouse):
@@ -201,22 +211,20 @@ def import_excel(warehouse):
         ws = wb.active
 
         conn = get_connection()
-        c = conn.cursor()
+        with conn.cursor() as c:
+            c.execute("DELETE FROM products WHERE warehouse=%s", (warehouse,))
+            c.execute("DELETE FROM scans WHERE warehouse=%s", (warehouse,))
 
-        c.execute("DELETE FROM products WHERE warehouse=%s", (warehouse,))
-        c.execute("DELETE FROM scans WHERE warehouse=%s", (warehouse,))
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                location, model, description, inv_qty = row[:4]
 
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            location, model, description, inv_qty = row[:4]
-
-            c.execute("""
-                INSERT INTO products
-                (warehouse, location, model, description, inv_qty, act_qty)
-                VALUES (%s,%s,%s,%s,%s,0)
-            """, (warehouse, location, model, description, inv_qty))
+                c.execute("""
+                    INSERT INTO products
+                    (warehouse, location, model, description, inv_qty, act_qty)
+                    VALUES (%s,%s,%s,%s,%s,0)
+                """, (warehouse, location, model, description, inv_qty))
 
         conn.commit()
-
         return redirect(f"/warehouse/{warehouse}")
 
     except Exception as e:
@@ -226,7 +234,7 @@ def import_excel(warehouse):
         release_connection(conn)
 
 
-# -------- SCAN -------- #
+# ================= SCAN ================= #
 
 @app.route("/scan", methods=["POST"])
 def scan():
@@ -241,39 +249,35 @@ def scan():
         model = barcode[:9].upper()
 
         conn = get_connection()
-        cur = conn.cursor()
-
-        cur.execute("""
-            SELECT id, act_qty
-            FROM products
-            WHERE model=%s AND warehouse=%s
-        """, (model, warehouse))
-
-        row = cur.fetchone()
-
-        if not row:
-            return jsonify({"status": "not_found"})
-
-        product_id, act = row
-
-        try:
+        with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO scans (full_barcode, warehouse)
-                VALUES (%s,%s)
-            """, (barcode, warehouse))
-        except Exception:
-            return jsonify({"status": "duplicate"})
+                SELECT id, act_qty
+                FROM products
+                WHERE model=%s AND warehouse=%s
+            """, (model, warehouse))
 
-        new_act = act + 1
+            row = cur.fetchone()
 
-        cur.execute("""
-            UPDATE products
-            SET act_qty=%s
-            WHERE id=%s
-        """, (new_act, product_id))
+            if not row:
+                return jsonify({"status": "not_found"})
+
+            product_id, act = row
+
+            try:
+                cur.execute("""
+                    INSERT INTO scans (full_barcode, warehouse)
+                    VALUES (%s,%s)
+                """, (barcode, warehouse))
+            except Exception:
+                return jsonify({"status": "duplicate"})
+
+            cur.execute("""
+                UPDATE products
+                SET act_qty=%s
+                WHERE id=%s
+            """, (act + 1, product_id))
 
         conn.commit()
-
         return jsonify({"status": "success"})
 
     except Exception as e:
@@ -283,30 +287,26 @@ def scan():
         release_connection(conn)
 
 
-# -------- DELETE -------- #
+# ================= DELETE ================= #
 
 @app.route("/delete_selected", methods=["POST"])
 def delete_selected():
     conn = None
     try:
         data = request.get_json()
-        ids = data.get("ids", [])
+        ids = [int(i) for i in data.get("ids", [])]
 
         if not ids:
             return "No data"
 
-        ids = [int(i) for i in ids]
-
         conn = get_connection()
-        c = conn.cursor()
-
-        c.execute(
-            "DELETE FROM products WHERE id = ANY(%s::int[])",
-            (ids,)
-        )
+        with conn.cursor() as c:
+            c.execute(
+                "DELETE FROM products WHERE id = ANY(%s)",
+                (ids,)
+            )
 
         conn.commit()
-
         return "OK"
 
     except Exception as e:
@@ -316,25 +316,22 @@ def delete_selected():
         release_connection(conn)
 
 
-# -------- EXPORT -------- #
+# ================= EXPORT ================= #
 
 @app.route("/export/<warehouse>")
 def export_excel(warehouse):
     conn = None
     try:
         conn = get_connection()
-        c = conn.cursor()
-
-        c.execute("""
-            SELECT location, model, description, inv_qty, act_qty
-            FROM products WHERE warehouse=%s
-        """, (warehouse,))
-
-        rows = c.fetchall()
+        with conn.cursor() as c:
+            c.execute("""
+                SELECT location, model, description, inv_qty, act_qty
+                FROM products WHERE warehouse=%s
+            """, (warehouse,))
+            rows = c.fetchall()
 
         wb = Workbook()
         ws = wb.active
-
         ws.append(["Location", "Model Code", "Description", "Inv.Qty", "Act.Qty"])
 
         for row in rows:
@@ -352,7 +349,7 @@ def export_excel(warehouse):
         release_connection(conn)
 
 
-# ---------------- RUN ---------------- #
+# ================= RUN ================= #
 
 init_pool()
 init_db()
