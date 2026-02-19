@@ -1,206 +1,364 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Warehouse</title>
+<title>Haier Warehouse Scanner System</title>
 
 <style>
-body {
-    margin: 0;
-    font-family: Arial;
+body{
+    margin:0;
+    font-family:Segoe UI, Arial;
+    background:#dfe3e8;
 }
-
-.header {
-    background: #1f5f99;
-    color: white;
-    padding: 15px;
-    font-size: 22px;
+.topbar{
+    background:#0b5fa5;
+    color:white;
+    padding:12px 20px;
+    display:flex;
+    align-items:center;
 }
-
-.container {
-    display: flex;
+.logo{
+    font-size:34px;
+    font-weight:bold;
+    margin-right:20px;
 }
-
-.sidebar {
-    width: 300px;
-    padding: 15px;
-    border-right: 1px solid #ccc;
+.company{
+    font-size:16px;
 }
-
-.main {
-    flex: 1;
-    padding: 15px;
+.main{
+    display:flex;
+    padding:20px;
 }
-
-table {
-    width: 100%;
-    border-collapse: collapse;
+.left{
+    width:380px;
 }
-
-th, td {
-    border: 1px solid #ccc;
-    padding: 8px;
-    text-align: center;
+.card{
+    background:#efefef;
+    padding:20px;
+    margin-bottom:20px;
+    border:1px solid #bcbcbc;
 }
-
-.complete {
-    background: #90ee90;
+select{
+    width:100%;
+    padding:8px;
+    margin-top:10px;
+    font-size:14px;
 }
-
-.over {
-    background: #ff9999;
+input[type=text]{
+    width:100%;
+    padding:10px;
+    font-size:16px;
+    margin-top:10px;
+    border:1px solid #aaa;
 }
-
-button {
-    margin-top: 10px;
-    padding: 8px;
+.readonly{
+    background:#d9dee5;
+}
+.btn{
+    padding:8px 14px;
+    border:none;
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
+    margin-right:10px;
+}
+.btn-blue{ background:#148ea1; }
+.btn-red{ background:#d62f2f; }
+.btn-green{ background:#2ea043; }
+.btn-add{ background:#2f5bd6; width:100%; margin-top:10px; }
+.right{
+    flex:1;
+    background:#efefef;
+    padding:10px;
+    border:1px solid #bcbcbc;
+    height:650px;
+    overflow:auto;
+}
+table{
+    width:100%;
+    border-collapse:collapse;
+    background:white;
+}
+th,td{
+    border:1px solid #ccc;
+    padding:6px;
+    text-align:center;
+    font-size:13px;
+}
+th{
+    background:#d0d5db;
+    font-weight:bold;
+}
+tr:hover{
+    background:#f1f7ff;
+}
+.complete{
+    background:#c6f6c6 !important;
+}
+.over{
+    background:#ffc9c9 !important;
+}
+.selected{
+    background:#ffd966 !important;
 }
 </style>
-
 </head>
 
 <body>
 
-<div class="header">
-    Haier
+<div class="topbar">
+    <div class="logo">Haier</div>
+    <div class="company">
+        บริษัท ไฮเออร์ อีเล็คทริค (ประเทศไทย) จำกัด (มหาชน)
+    </div>
 </div>
 
-<div class="container">
+<div class="main">
 
-    <!-- LEFT -->
-    <div class="sidebar">
+<div class="left">
 
-        <h3>Select Warehouse</h3>
-        <select id="warehouseSelect">
-            <option value="{{warehouse}}">{{warehouse}}</option>
+<div class="card">
+    <b>Select Warehouse</b>
+    <form action="/" method="GET">
+        <select onchange="location.href='/warehouse/'+this.value">
+            {% for w in warehouses %}
+            <option value="{{w}}" {% if w==warehouse %}selected{% endif %}>
+                {{w}}
+            </option>
+            {% endfor %}
         </select>
+    </form>
 
-        <h3>Original Model Code</h3>
-        <input type="text" id="barcodeInput" autofocus style="width:100%; padding:8px;">
+    <br><br>
+    <input type="text" id="newWarehouse" placeholder="New Warehouse">
+    <button class="btn btn-add" onclick="addWarehouse()">Add Warehouse</button>
+</div>
 
-        <h3>Model Code (9 digit)</h3>
-        <input type="text" id="modelCode" readonly style="width:100%; padding:8px;">
+<div class="card">
+    <b>Original Model Code</b>
+    <input type="text" id="barcode" autofocus>
 
-        <h3>Select Location</h3>
-        <input type="text" id="locationInput" value="{{warehouse}}" readonly style="width:100%; padding:8px;">
+    <br><br>
+    <b>Model Code (9 digit)</b>
+    <input type="text" id="model" class="readonly" readonly>
 
-        <br>
+    <br><br>
+    <b>Select Location</b>
+    <input type="text" id="scanLocation">
+</div>
 
-        <button>Import</button>
-        <button>Export Excel</button>
+<div style="margin-top:10px;">
 
-    </div>
+    <form action="{{ url_for('import_excel', warehouse=warehouse) }}"
+      method="POST"
+      enctype="multipart/form-data"
+      style="display:inline;">
 
-    <!-- RIGHT -->
-    <div class="main">
+        <input type="file" name="file" required>
+        <button class="btn btn-blue">Import</button>
+    </form>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>NO.</th>
-                    <th>Location</th>
-                    <th>Model Code</th>
-                    <th>Description</th>
-                    <th>Inv.Qty</th>
-                    <th>Act.Qty</th>
-                </tr>
-            </thead>
+    <button class="btn btn-red" onclick="deleteSelected()">
+        Delete Selected
+    </button>
 
-            <tbody>
-                {% for row in rows %}
-                <tr>
-                    <td>{{loop.index}}</td>
-                    <td>{{row[0]}}</td>
-                    <td>{{row[1]}}</td>
-                    <td>{{row[2]}}</td>
-                    <td class="inv">{{row[3]}}</td>
-                    <td class="act">{{row[4]}}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
+    <button class="btn btn-green"
+        onclick="window.location='/export/{{warehouse}}'">
+        Export Excel
+    </button>
 
-        </table>
+</div>
+</div>
 
-    </div>
+<div class="right">
 
+<table id="productTable">
+<thead>
+<tr>
+<th>NO.</th>
+<th>Location</th>
+<th>Model Code</th>
+<th>Product description</th>
+<th>Inv.Qty</th>
+<th>Act.Qty</th>
+</tr>
+</thead>
+
+<tbody>
+{% for p in products %}
+<tr data-id="{{p[0]}}"
+    data-model="{{p[2]}}"
+    data-location="{{p[1]}}">
+<td>{{loop.index}}</td>
+<td>{{p[1]}}</td>
+<td>{{p[2]}}</td>
+<td>{{p[3]}}</td>
+<td class="inv">{{p[4]}}</td>
+<td class="act">{{p[5]}}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+
+</div>
 </div>
 
 <script>
 
-const barcodeInput = document.getElementById("barcodeInput");
-const modelCodeInput = document.getElementById("modelCode");
+let scannedBarcodes = new Set();
 
-barcodeInput.addEventListener("keypress", function(e){
+document.addEventListener("DOMContentLoaded", function(){
 
-    if(e.key === "Enter"){
+    const barcodeInput = document.getElementById("barcode");
+    const modelInput   = document.getElementById("model");
 
-        let fullCode = barcodeInput.value.trim();
-        if(!fullCode) return;
+    barcodeInput.addEventListener("keydown", function(e){
 
-        // 🔥 ใช้ตรง (ไม่ตัด)
-        let modelCode = fullCode;
+        if(e.key === "Enter"){
 
-        modelCodeInput.value = modelCode;
+            e.preventDefault();
 
-        let location = document.getElementById("locationInput").value;
+            let fullCode = barcodeInput.value.trim().toUpperCase();
 
-        if(!location){
-            alert("❌ กรุณาเลือก Location");
-            return;
-        }
-
-        fetch("/scan", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                model_code: modelCode,
-                location: location
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-
-            if(data.status === "duplicate"){
-                alert(data.message);
+            if(fullCode.length < 9){
+                barcodeInput.value="";
+                return;
             }
 
-            else if(data.status === "success"){
+            if(scannedBarcodes.has(fullCode)){
+                alert("Barcode ซ้ำ: " + fullCode);
+                barcodeInput.value="";
+                return;
+            }
 
-                let rows = document.querySelectorAll("tbody tr");
+            let scanLocation =
+                document.getElementById("scanLocation")
+                .value.trim().toUpperCase();
 
-                rows.forEach(row => {
+            if(scanLocation===""){
+                alert("กรุณาใส่ Location ก่อนสแกน");
+                barcodeInput.value="";
+                return;
+            }
 
-                    let modelCell = row.children[2]; // 🔥 สำคัญ
+            let modelCode = fullCode.substring(0,9);
+            modelInput.value = modelCode;
+
+            let row = document.querySelector(
+                "tr[data-model='"+modelCode+"'][data-location='"+scanLocation+"']"
+            );
+
+            if(!row){
+                alert("ไม่พบ Model นี้ใน Location ที่เลือก");
+                barcodeInput.value="";
+                return;
+            }
+
+            // 🔥 บันทึกลงฐานข้อมูลจริง
+            fetch("/scan", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: "barcode=" + fullCode + "&warehouse={{warehouse}}"
+            })
+            .then(res => res.json())
+            .then(data => {
+
+                if(data.status === "success"){
+
+                    scannedBarcodes.add(fullCode);
+
                     let actCell = row.querySelector(".act");
                     let invCell = row.querySelector(".inv");
 
-                    if(modelCell.innerText.trim() === modelCode){
+                    let act = parseInt(actCell.innerText)||0;
+                    let inv = parseInt(invCell.innerText)||0;
 
-                        let act = parseInt(actCell.innerText) || 0;
-                        let inv = parseInt(invCell.innerText) || 0;
+                    act++;
+                    actCell.innerText = act;
 
-                        act++;
-                        actCell.innerText = act;
+                    row.classList.remove("complete","over");
 
-                        row.classList.remove("complete","over");
+                    if(act===inv) row.classList.add("complete");
+                    if(act>inv)   row.classList.add("over");
 
-                        if(act === inv) row.classList.add("complete");
-                        if(act > inv) row.classList.add("over");
-                    }
-                });
-            }
+                }
+                else if(data.status === "duplicate"){
+                    alert("Barcode นี้ถูกสแกนแล้วในระบบ");
+                }
+                else{
+                    alert("ไม่พบข้อมูลในระบบ");
+                }
 
-            else{
-                alert(data.message);
-            }
+                barcodeInput.value="";
+                barcodeInput.focus();
 
-            barcodeInput.value="";
-            barcodeInput.focus();
-        });
-    }
+            })
+            .catch(()=>{
+                alert("เกิดข้อผิดพลาดในการบันทึก");
+                barcodeInput.value="";
+                barcodeInput.focus();
+            });
+
+        }
+
+    });
+
 });
+
+function addWarehouse(){
+
+    let name=document.getElementById("newWarehouse")
+              .value.trim();
+
+    if(name===""){
+        alert("กรุณาใส่ชื่อ Warehouse");
+        return;
+    }
+
+    fetch("/add_warehouse",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json"
+        },
+        body:JSON.stringify({name:name})
+    })
+    .then(res=>res.json())
+    .then(data=>{
+        if(data.success){
+            alert("เพิ่ม Warehouse สำเร็จ");
+            location.reload();
+        }else{
+            alert("เพิ่มไม่สำเร็จ");
+        }
+    });
+}
+
+function deleteSelected(){
+
+    let rows=document.querySelectorAll("tr.selected");
+
+    if(rows.length===0){
+        alert("No rows selected");
+        return;
+    }
+
+    let ids=[];
+
+    rows.forEach(r=>{
+        ids.push(r.getAttribute("data-id"));
+    });
+
+    fetch("/delete_selected",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json"
+        },
+        body:JSON.stringify({ids:ids})
+    })
+    .then(()=>location.reload());
+}
 
 </script>
 
