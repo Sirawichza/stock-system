@@ -261,16 +261,23 @@ def delete_selected():
     if not ids:
         return "No data"
 
+    # ✅ แปลง id เป็น int กันพลาด
+    ids = [int(i) for i in ids]
+
     conn = get_connection()
     c = conn.cursor()
 
-    for id in ids:
-        c.execute("DELETE FROM products WHERE id=%s", (id,))
+    # ✅ ลบทีเดียว (โคตรเสถียร)
+    c.execute(
+        "DELETE FROM products WHERE id = ANY(%s)",
+        (ids,)
+    )
 
     conn.commit()
     conn.close()
 
     return "OK"
+
 
 
 # -------- EXPORT -------- #
