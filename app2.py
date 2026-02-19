@@ -6,6 +6,8 @@ from psycopg2 import pool
 from urllib.parse import urlparse
 import uuid
 
+db_initialized = False
+
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
@@ -41,18 +43,20 @@ def get_connection():
     global db_pool, db_initialized
 
     try:
+        # 🔵 ยังไม่มี pool → สร้าง
         if db_pool is None:
             print("🔵 INIT POOL")
             init_pool()
 
+        # 🟢 ยังไม่ init DB → สร้าง table
         if not db_initialized:
             print("🟢 INIT DB")
-            init_db()
-            db_initialized = True
+            init_db()   # ❗ ไม่ต้อง set db_initialized ตรงนี้
 
+        # 📦 ดึง connection
         conn = db_pool.getconn()
 
-        # ✅ เช็ค connection ยังใช้ได้ไหม
+        # ✅ เช็คว่า connection ยังไม่ตาย
         cur = conn.cursor()
         cur.execute("SELECT 1")
         cur.close()
@@ -62,10 +66,20 @@ def get_connection():
     except Exception as e:
         print("❌ DB ERROR → reconnect:", e)
 
-        # 🔁 สร้าง pool ใหม่
+        # 🔥 ปิด pool เก่าทิ้ง (กันค้างสะสม)
+        try:
+            if db_pool:
+                db_pool.closeall()
+        except:
+            pass
+
+        # 🔁 สร้างใหม่
         init_pool()
+
+        # 📦 เอา connection ใหม่
         conn = db_pool.getconn()
         return conn
+
 
 
 
@@ -76,49 +90,65 @@ def release_connection(conn):
 
 # ---------------- INIT DB ---------------- #
 def init_db():
+    global db_initialized
+
+    if db_initialized:
+        return
+
     conn = db_pool.getconn()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    # warehouses
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS warehouses (
-        id SERIAL PRIMARY KEY,
-        name TEXT UNIQUE
-    )
-    """)
+        # warehouses
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS warehouses (
+            id SERIAL PRIMARY KEY,
+            name TEXT UNIQUE
+        )
+        """)
 
-    # products
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS products (
-        id SERIAL PRIMARY KEY,
-        warehouse TEXT,
-        location TEXT,
-        model TEXT,
-        description TEXT,
-        inv_qty INTEGER DEFAULT 0,
-        act_qty INTEGER DEFAULT 0
-    )
-    """)
+        # products
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS products (
+            id SERIAL PRIMARY KEY,
+            warehouse TEXT,
+            location TEXT,
+            model TEXT,
+            description TEXT,
+            inv_qty INTEGER DEFAULT 0,
+            act_qty INTEGER DEFAULT 0
+        )
+        """)
 
-    # scans
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS scans (
-        id SERIAL PRIMARY KEY,
-        full_barcode TEXT,
-        warehouse TEXT,
-        UNIQUE(full_barcode, warehouse)
-    )
-    """)
+        # scans
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS scans (
+            id SERIAL PRIMARY KEY,
+            full_barcode TEXT,
+            warehouse TEXT,
+            UNIQUE(full_barcode, warehouse)
+        )
+        """)
 
-    # ✅ index เร็วขึ้นมาก
-    cur.execute("""
-    CREATE INDEX IF NOT EXISTS idx_products_model_wh
-    ON products(model, warehouse)
-    """)
+        # index
+        cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_products_model_wh
+        ON products(model, warehouse)
+        """)
 
-    conn.commit()
-    cur.close()
-    db_pool.putconn(conn)
+        conn.commit()
+        cur.close()
+
+        db_initialized = True
+
+    except Exception as e:
+        conn.rollback()
+        print("INIT DB ERROR:", e)
+
+    finally:
+        db_pool.putconn(conn)
+
+
 
 
 # ---------------- CACHE ---------------- #
