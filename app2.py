@@ -7,6 +7,8 @@ from urllib.parse import urlparse
 
 app = Flask(__name__)
 
+
+
 UPLOAD_FOLDER = "uploads"
 
 if not os.path.exists(UPLOAD_FOLDER):
@@ -69,6 +71,13 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+
+
+try:
+    init_db()
+except Exception as e:
+    print("DB INIT ERROR:", e)
 
 
 def get_warehouses():
@@ -296,6 +305,9 @@ def export_excel(warehouse):
 
 
 # ---------------- RUN ---------------- #
+
+if __name__ == "__main__":
+    app.run(debug=True)
 
 
 
