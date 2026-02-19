@@ -373,19 +373,30 @@ def export_excel(warehouse):
         c = conn.cursor()
 
         c.execute("""
-            SELECT location, model, description, inv_qty, act_qty
+            SELECT warehouse, location, model, description, inv_qty, act_qty
             FROM products WHERE warehouse=%s
         """, (warehouse,))
+
 
         rows = c.fetchall()
 
         wb = Workbook()
         ws = wb.active
 
-        ws.append(["Location", "Model Code", "Description", "Inv.Qty", "Act.Qty"])
+        # 🔵 หัวรายงาน
+        ws["A1"] = "Warehouse"
+        ws["B1"] = warehouse
 
+        # 🔵 เว้นบรรทัด
+        ws.append([])
+
+        # 🟢 หัวตาราง
+        ws.append(["Location", "Model Code", "Product description", "Inv.Qty", "Act.Qty"])
+
+        # 📦 ข้อมูล
         for row in rows:
             ws.append(row)
+
 
         file_path = os.path.join(UPLOAD_FOLDER, f"{warehouse}_result.xlsx")
         wb.save(file_path)
