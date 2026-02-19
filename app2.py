@@ -259,6 +259,7 @@ def scan():
 
     model_code = data.get('model_code')
     location = data.get('location')
+    warehouse = data.get('warehouse')  # 🔥 ต้องมี
 
     if not location:
         return jsonify({"status": "error", "message": "กรุณาเลือก location"})
@@ -267,36 +268,43 @@ def scan():
         conn = get_connection()
         cur = conn.cursor()
 
-        # ✅ เช็คซ้ำ
+        # ✅ เช็คว่ามี model นี้ใน location + warehouse ไหม
         cur.execute("""
-            SELECT 1 FROM stock
-            WHERE model_code = %s AND location = %s
-        """, (model_code, location))
+            SELECT id, act_qty FROM products
+            WHERE model=%s AND location=%s AND warehouse=%s
+        """, (model_code, location, warehouse))
 
-        exists = cur.fetchone()
+        row = cur.fetchone()
 
-        if exists:
-            # 🔥 อันนี้แหละที่หายไป
+        if not row:
             return jsonify({
-                "status": "duplicate",
-                "message": "❌ บาร์โค้ดนี้มีใน location นี้แล้ว"
+                "status": "not_found",
+                "message": "❌ ไม่มีบาร์โค้ดใน location นี้"
             })
 
-        # ✅ insert ถ้าไม่ซ้ำ
+        product_id, act_qty = row
+
+        # ✅ เพิ่มจำนวนแทน insert ใหม่
         cur.execute("""
-            INSERT INTO stock (model_code, location)
-            VALUES (%s, %s)
-        """, (model_code, location))
+            UPDATE products
+            SET act_qty = %s
+            WHERE id = %s
+        """, (act_qty + 1, product_id))
 
         conn.commit()
 
         return jsonify({
             "status": "success",
-            "message": "✅ บันทึกสำเร็จ"
+            "message": "✅ เพิ่มจำนวนสำเร็จ"
         })
 
     except Exception as e:
+        print("SCAN ERROR:", e)  # 🔥 ต้อง print
         return jsonify({"status": "error", "message": str(e)})
+
+    finally:
+        release_connection(conn)
+
 
 
 
