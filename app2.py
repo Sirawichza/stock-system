@@ -103,6 +103,10 @@ def get_products(warehouse):
 
 
 # ---------------- ROUTES ---------------- #
+@app.route("/ping")
+def ping():
+    return "pong"
+
 
 @app.route("/")
 def index():
