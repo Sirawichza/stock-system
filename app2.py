@@ -4,16 +4,12 @@ import os
 import psycopg2
 from psycopg2 import pool
 from urllib.parse import urlparse
+db_pool = None
+db_initialized = False
 
 app = Flask(__name__)
 
-@app.before_first_request
-def startup():
-    global db_pool
-    if db_pool is None:
-        print("INIT DB POOL...")
-        init_pool()
-        init_db()
+
 
 UPLOAD_FOLDER = "uploads"
 
@@ -45,11 +41,24 @@ def init_pool():
 
 
 def get_connection():
-    global db_pool
-    if db_pool is None:
-        init_pool()
-    return db_pool.getconn()
+    global db_pool, db_initialized
 
+    try:
+        if db_pool is None:
+            print("🔵 INIT POOL")
+            init_pool()
+
+        if not db_initialized:
+            print("🟢 INIT DB")
+            init_db()
+            db_initialized = True
+
+        conn = db_pool.getconn()
+        return conn
+
+    except Exception as e:
+        print("❌ GET CONNECTION ERROR:", e)
+        raise
 
 
 def release_connection(conn):
@@ -363,7 +372,6 @@ def export_excel(warehouse):
 # ---------------- RUN ---------------- #
 
 if __name__ == "__main__":
-    init_pool()   # ✅ สำคัญมาก
-    init_db()
+   
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
