@@ -211,13 +211,7 @@ document.addEventListener("DOMContentLoaded", function(){
 
     const barcodeInput = document.getElementById("barcode");
     const modelInput   = document.getElementById("model");
-     // ✅ เพิ่มตรงนี้
-    document.querySelectorAll("#productTable tbody tr").forEach(row => {
-        row.addEventListener("click", function () {
-            this.classList.toggle("selected");
-        });
-    });
- 
+
     barcodeInput.addEventListener("keydown", function(e){
 
         if(e.key === "Enter"){
