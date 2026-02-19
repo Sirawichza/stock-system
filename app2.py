@@ -7,9 +7,6 @@ from urllib.parse import urlparse
 
 app = Flask(__name__)
 
-with app.app_context():
-    init_db()
-
 UPLOAD_FOLDER = "uploads"
 
 if not os.path.exists(UPLOAD_FOLDER):
