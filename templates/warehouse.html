@@ -188,7 +188,7 @@ tr:hover{
 {% for p in products %}
 <tr data-id="{{p[0]}}"
     data-model="{{p[2]}}"
-    data-location="{{p[1]}}">
+    data-location="{{p[1]|upper}}">
 <td>{{loop.index}}</td>
 <td>{{p[1]}}</td>
 <td>{{p[2]}}</td>
@@ -211,6 +211,14 @@ document.addEventListener("DOMContentLoaded", function(){
 
     const barcodeInput = document.getElementById("barcode");
     const modelInput   = document.getElementById("model");
+
+    // ✅ click เลือก row (แก้ bug delete ใช้ไม่ได้)
+    document.querySelectorAll("#productTable tbody tr")
+    .forEach(row => {
+        row.addEventListener("click", () => {
+            row.classList.toggle("selected");
+        });
+    });
 
     barcodeInput.addEventListener("keydown", function(e){
 
@@ -254,7 +262,6 @@ document.addEventListener("DOMContentLoaded", function(){
                 return;
             }
 
-            // 🔥 บันทึกลงฐานข้อมูลจริง
             fetch("/scan", {
                 method: "POST",
                 headers: {
@@ -283,6 +290,8 @@ document.addEventListener("DOMContentLoaded", function(){
                     if(act===inv) row.classList.add("complete");
                     if(act>inv)   row.classList.add("over");
 
+                    // 🔊 เสียงแจ้งเตือน
+                    new Audio("https://www.soundjay.com/buttons/sounds/beep-01a.mp3").play();
                 }
                 else if(data.status === "duplicate"){
                     alert("Barcode นี้ถูกสแกนแล้วในระบบ");
