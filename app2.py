@@ -2,71 +2,36 @@ from flask import Flask, render_template, request, redirect, send_file, jsonify
 from openpyxl import load_workbook, Workbook
 import os
 import psycopg2
-from psycopg2 import pool, OperationalError
-from urllib.parse import urlparse
 import gc
+
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ================= DB ================= #
-
-db_pool = None
-
-
-def init_pool():
-    global db_pool
-
-    if db_pool:
-        return
-
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        raise Exception("DATABASE_URL not set")
-
-    result = urlparse(database_url)
-
-    db_pool = psycopg2.pool.SimpleConnectionPool(
-        1, 10,
-        database=result.path[1:],
-        user=result.username,
-        password=result.password,
-        host=result.hostname,
-        port=result.port,
-        sslmode="require",
-        connect_timeout=5
-    )
-
+# ================= DB (FIX จบจริง) ================= #
 
 def get_connection():
-    global db_pool
-
-    if not db_pool:
-        init_pool()
-
     try:
-        conn = db_pool.getconn()
+        conn = psycopg2.connect(
+            os.environ.get("DATABASE_URL"),
+            sslmode="require",
+            connect_timeout=10
+        )
         conn.autocommit = False
         return conn
-    except OperationalError:
-        # 🔥 reconnect ถ้า DB หลุด
-        db_pool = None
-        init_pool()
-        return db_pool.getconn()
+    except Exception as e:
+        print("DB CONNECT ERROR:", e)
+        return None
 
 
-def release_connection(conn):
-    try:
-        if conn:
-            conn.rollback()
-            db_pool.putconn(conn)
-    except:
-        pass
-
+# ================= INIT DB ================= #
 
 def init_db():
     conn = get_connection()
+    if not conn:
+        return
+
     try:
         with conn.cursor() as c:
             c.execute("""
@@ -98,7 +63,7 @@ def init_db():
             """)
         conn.commit()
     finally:
-        release_connection(conn)
+        conn.close()
 
 
 # ================= NO CACHE ================= #
@@ -106,15 +71,18 @@ def init_db():
 @app.after_request
 def add_header(response):
     response.headers["Cache-Control"] = "no-store"
+    gc.collect()
     return response
 
 
 # ================= FUNCTIONS ================= #
 
 def get_warehouses():
-    conn = None
+    conn = get_connection()
+    if not conn:
+        return []
+
     try:
-        conn = get_connection()
         with conn.cursor() as c:
             c.execute("SELECT name FROM warehouses ORDER BY name")
             rows = c.fetchall()
@@ -123,13 +91,15 @@ def get_warehouses():
         print("GET WAREHOUSE ERROR:", e)
         return []
     finally:
-        release_connection(conn)
+        conn.close()
 
 
 def get_products(warehouse):
-    conn = None
+    conn = get_connection()
+    if not conn:
+        return []
+
     try:
-        conn = get_connection()
         with conn.cursor() as c:
             c.execute("""
                 SELECT id, location, model, description, inv_qty, act_qty
@@ -142,47 +112,41 @@ def get_products(warehouse):
         print("GET PRODUCT ERROR:", e)
         return []
     finally:
-        release_connection(conn)
+        conn.close()
 
-
-@app.after_request
-def after_request(response):
-    gc.collect()
-    return response
 
 # ================= ROUTES ================= #
 
 @app.route("/")
 def index():
     warehouses = get_warehouses()
-
     if not warehouses:
         return "OK"
-
     return redirect(f"/warehouse/{warehouses[0]}")
 
 
 @app.route("/add_warehouse", methods=["POST"])
 def add_warehouse():
-    conn = None
+    data = request.get_json()
+    name = data.get("name")
+
+    if not name:
+        return jsonify({"success": False})
+
+    conn = get_connection()
+    if not conn:
+        return jsonify({"success": False})
+
     try:
-        data = request.get_json()
-        name = data.get("name")
-
-        if not name:
-            return jsonify({"success": False})
-
-        conn = get_connection()
         with conn.cursor() as c:
             c.execute("INSERT INTO warehouses (name) VALUES (%s)", (name,))
         conn.commit()
-
         return jsonify({"success": True})
     except Exception as e:
         print("ADD ERROR:", e)
         return jsonify({"success": False})
     finally:
-        release_connection(conn)
+        conn.close()
 
 
 @app.route("/warehouse/<warehouse>")
@@ -206,16 +170,18 @@ def warehouse_page(warehouse):
 
 @app.route("/import/<warehouse>", methods=["POST"])
 def import_excel(warehouse):
-    conn = None
+    file = request.files["file"]
+    path = os.path.join(UPLOAD_FOLDER, file.filename)
+    file.save(path)
+
+    wb = load_workbook(path)
+    ws = wb.active
+
+    conn = get_connection()
+    if not conn:
+        return "DB ERROR"
+
     try:
-        file = request.files["file"]
-        path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(path)
-
-        wb = load_workbook(path)
-        ws = wb.active
-
-        conn = get_connection()
         with conn.cursor() as c:
             c.execute("DELETE FROM products WHERE warehouse=%s", (warehouse,))
             c.execute("DELETE FROM scans WHERE warehouse=%s", (warehouse,))
@@ -236,24 +202,26 @@ def import_excel(warehouse):
         print("IMPORT ERROR:", e)
         return "IMPORT FAIL"
     finally:
-        release_connection(conn)
+        conn.close()
 
 
 # ================= SCAN ================= #
 
 @app.route("/scan", methods=["POST"])
 def scan():
-    conn = None
+    barcode = request.form.get("barcode")
+    warehouse = request.form.get("warehouse")
+
+    if not barcode:
+        return jsonify({"status": "not_found"})
+
+    model = barcode[:9].upper()
+
+    conn = get_connection()
+    if not conn:
+        return jsonify({"status": "error"})
+
     try:
-        barcode = request.form.get("barcode")
-        warehouse = request.form.get("warehouse")
-
-        if not barcode:
-            return jsonify({"status": "not_found"})
-
-        model = barcode[:9].upper()
-
-        conn = get_connection()
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, act_qty
@@ -273,7 +241,7 @@ def scan():
                     INSERT INTO scans (full_barcode, warehouse)
                     VALUES (%s,%s)
                 """, (barcode, warehouse))
-            except Exception:
+            except:
                 return jsonify({"status": "duplicate"})
 
             cur.execute("""
@@ -289,45 +257,44 @@ def scan():
         print("SCAN ERROR:", e)
         return jsonify({"status": "error"})
     finally:
-        release_connection(conn)
+        conn.close()
 
 
 # ================= DELETE ================= #
 
 @app.route("/delete_selected", methods=["POST"])
 def delete_selected():
-    conn = None
+    data = request.get_json()
+    ids = [int(i) for i in data.get("ids", [])]
+
+    if not ids:
+        return "No data"
+
+    conn = get_connection()
+    if not conn:
+        return "ERROR"
+
     try:
-        data = request.get_json()
-        ids = [int(i) for i in data.get("ids", [])]
-
-        if not ids:
-            return "No data"
-
-        conn = get_connection()
         with conn.cursor() as c:
-            c.execute(
-                "DELETE FROM products WHERE id = ANY(%s)",
-                (ids,)
-            )
-
+            c.execute("DELETE FROM products WHERE id = ANY(%s)", (ids,))
         conn.commit()
         return "OK"
-
     except Exception as e:
         print("DELETE ERROR:", e)
         return "ERROR"
     finally:
-        release_connection(conn)
+        conn.close()
 
 
 # ================= EXPORT ================= #
 
 @app.route("/export/<warehouse>")
 def export_excel(warehouse):
-    conn = None
+    conn = get_connection()
+    if not conn:
+        return "DB ERROR"
+
     try:
-        conn = get_connection()
         with conn.cursor() as c:
             c.execute("""
                 SELECT location, model, description, inv_qty, act_qty
@@ -351,12 +318,11 @@ def export_excel(warehouse):
         print("EXPORT ERROR:", e)
         return "EXPORT FAIL"
     finally:
-        release_connection(conn)
+        conn.close()
 
 
 # ================= RUN ================= #
 
-init_pool()
 init_db()
 
 if __name__ == "__main__":
