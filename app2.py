@@ -26,12 +26,14 @@ def get_connection():
     result = urlparse(database_url)
 
     return psycopg2.connect(
-        database=result.path[1:],
-        user=result.username,
-        password=result.password,
-        host=result.hostname,
-        port=result.port
-    )
+    database=result.path[1:],
+    user=result.username,
+    password=result.password,
+    host=result.hostname,
+    port=result.port,
+    connect_timeout=5
+)
+
 
     
 
@@ -103,14 +105,13 @@ def get_products(warehouse):
 
 
 # ---------------- ROUTES ---------------- #
-@app.route("/ping")
-def ping():
-    return "pong"
-
 
 @app.route("/")
 def index():
-    warehouses = get_warehouses()
+    try:
+        warehouses = get_warehouses()
+    except Exception as e:
+        return "Database waking up... refresh in a few seconds"
 
     if not warehouses:
         return render_template(
@@ -121,6 +122,7 @@ def index():
         )
 
     return redirect(f"/warehouse/{warehouses[0]}")
+
 
 
 @app.route("/add_warehouse", methods=["POST"])
