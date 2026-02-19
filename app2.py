@@ -31,18 +31,42 @@ def init_pool():
         password=result.password,
         host=result.hostname,
         port=result.port,
-        sslmode="require"
+        sslmode="require",
+        connect_timeout=5
     )
 
 
+
 def get_connection():
-    global db_pool
+    global db_pool, db_initialized
 
-    if db_pool is None:
+    try:
+        if db_pool is None:
+            print("🔵 INIT POOL")
+            init_pool()
+
+        if not db_initialized:
+            print("🟢 INIT DB")
+            init_db()
+            db_initialized = True
+
+        conn = db_pool.getconn()
+
+        # ✅ เช็ค connection ยังใช้ได้ไหม
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+
+        return conn
+
+    except Exception as e:
+        print("❌ DB ERROR → reconnect:", e)
+
+        # 🔁 สร้าง pool ใหม่
         init_pool()
-        init_db()
+        conn = db_pool.getconn()
+        return conn
 
-    return db_pool.getconn()
 
 
 def release_connection(conn):

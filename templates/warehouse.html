@@ -262,13 +262,19 @@ document.addEventListener("DOMContentLoaded", function(){
                 return;
             }
 
+            const controller = new AbortController();
+
+            setTimeout(() => controller.abort(), 5000);
+
             fetch("/scan", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded"
-                },
-                body: "barcode=" + fullCode + "&warehouse={{warehouse}}"
-            })
+                 method: "POST",
+  	   headers: {
+        	           "Content-Type": "application/x-www-form-urlencoded"
+                 },
+                 body: "barcode=" + fullCode + "&warehouse={{warehouse}}",
+                 signal: controller.signal
+             })
+
             .then(res => res.json())
             .then(data => {
 
@@ -304,11 +310,16 @@ document.addEventListener("DOMContentLoaded", function(){
                 barcodeInput.focus();
 
             })
-            .catch(()=>{
-                alert("เกิดข้อผิดพลาดในการบันทึก");
-                barcodeInput.value="";
-                barcodeInput.focus();
+            .catch((err)=>{
+   	   if (err.name === "AbortError") {
+        	       alert("เซิร์ฟเวอร์ตอบช้า (timeout)");
+                 } else {
+                     alert("เกิดข้อผิดพลาดในการบันทึก");
+                 }
+                 barcodeInput.value="";
+                 barcodeInput.focus();
             });
+
 
         }
 
