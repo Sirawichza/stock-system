@@ -252,58 +252,62 @@ def import_excel(warehouse):
 
 
 # -------- SCAN -------- #
-
 @app.route('/scan', methods=['POST'])
 def scan():
-    data = request.get_json()
-
-    model_code = data.get('model_code')
-    location = data.get('location')
-    warehouse = data.get('warehouse')  # 🔥 ต้องมี
-
-    if not location:
-        return jsonify({"status": "error", "message": "กรุณาเลือก location"})
-
     try:
+        data = request.get_json()
+
+        model_code = data.get('model_code')
+        location   = data.get('location')
+
+        if not model_code:
+            return jsonify({"status": "error", "message": "ไม่มี model_code"})
+
+        if not location:
+            return jsonify({"status": "error", "message": "กรุณาเลือก location"})
+
         conn = get_connection()
         cur = conn.cursor()
 
-        # ✅ เช็คว่ามี model นี้ใน location + warehouse ไหม
+        # ✅ เช็คซ้ำ
         cur.execute("""
-            SELECT id, act_qty FROM products
-            WHERE model=%s AND location=%s AND warehouse=%s
-        """, (model_code, location, warehouse))
+            SELECT 1 FROM stock
+            WHERE model_code = %s AND location = %s
+        """, (model_code, location))
 
-        row = cur.fetchone()
-
-        if not row:
+        if cur.fetchone():
             return jsonify({
-                "status": "not_found",
-                "message": "❌ ไม่มีบาร์โค้ดใน location นี้"
+                "status": "duplicate",
+                "message": "❌ บาร์โค้ดนี้มีแล้วใน location นี้"
             })
 
-        product_id, act_qty = row
+        # ✅ insert
+        cur.execute("""
+            INSERT INTO stock (model_code, location)
+            VALUES (%s, %s)
+        """, (model_code, location))
 
-        # ✅ เพิ่มจำนวนแทน insert ใหม่
+        # ✅ บวก Act.Qty
         cur.execute("""
             UPDATE products
-            SET act_qty = %s
-            WHERE id = %s
-        """, (act_qty + 1, product_id))
+            SET act_qty = act_qty + 1
+            WHERE model = %s AND location = %s
+        """, (model_code, location))
 
         conn.commit()
 
         return jsonify({
             "status": "success",
-            "message": "✅ เพิ่มจำนวนสำเร็จ"
+            "message": "✅ บันทึกสำเร็จ"
         })
 
     except Exception as e:
-        print("SCAN ERROR:", e)  # 🔥 ต้อง print
-        return jsonify({"status": "error", "message": str(e)})
+        print("SCAN ERROR:", e)
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        })
 
-    finally:
-        release_connection(conn)
 
 
 

@@ -214,9 +214,7 @@ document.addEventListener("DOMContentLoaded", function(){
 
     if(!barcodeInput || !modelInput) return;
 
-    // ✅ FIX: click แล้วไม่ไปชน input/button
     document.addEventListener("click", function(e){
-
         if(e.target.closest("button") || e.target.tagName==="INPUT") return;
 
         let row = e.target.closest("#productTable tbody tr");
@@ -238,11 +236,6 @@ document.addEventListener("DOMContentLoaded", function(){
                 return;
             }
 
-            if(scannedBarcodes.has(fullCode)){
-                barcodeInput.value="";
-                return;
-            }
-
             let scanLocation =
                 document.getElementById("scanLocation")
                 .value.trim().toUpperCase();
@@ -250,6 +243,14 @@ document.addEventListener("DOMContentLoaded", function(){
             if(scanLocation===""){
                 alert("กรุณาใส่ Location ก่อนสแกน");
                 barcodeInput.value="";
+                return;
+            }
+
+            // ✅ FIX: แจ้งเตือนซ้ำ
+            if(scannedBarcodes.has(fullCode)){
+                alert("บาร์โค้ดซ้ำ!");
+                barcodeInput.value="";
+                barcodeInput.focus();
                 return;
             }
 
@@ -276,6 +277,10 @@ document.addEventListener("DOMContentLoaded", function(){
             .then(res => res.json())
             .then(data => {
 
+                if(data.status === "duplicate"){
+                    alert("บาร์โค้ดนี้ถูกสแกนไปแล้วในระบบ!");
+                }
+
                 if(data.status === "success"){
 
                     scannedBarcodes.add(fullCode);
@@ -293,7 +298,6 @@ document.addEventListener("DOMContentLoaded", function(){
 
                     if(act===inv) row.classList.add("complete");
                     if(act>inv)   row.classList.add("over");
-
                 }
 
                 barcodeInput.value="";
@@ -301,6 +305,7 @@ document.addEventListener("DOMContentLoaded", function(){
 
             })
             .catch(()=>{
+                alert("เกิดข้อผิดพลาดในการส่งข้อมูล");
                 barcodeInput.value="";
                 barcodeInput.focus();
             });
@@ -310,6 +315,7 @@ document.addEventListener("DOMContentLoaded", function(){
     });
 
 });
+
 
 function addWarehouse(){
 
