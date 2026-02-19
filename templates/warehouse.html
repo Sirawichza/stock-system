@@ -212,14 +212,17 @@ document.addEventListener("DOMContentLoaded", function(){
     const barcodeInput = document.getElementById("barcode");
     const modelInput   = document.getElementById("model");
 
-    // ✅ FIX: กัน null แล้วค้าง
     if(!barcodeInput || !modelInput) return;
 
-    // ✅ เพิ่มเลือกแถว (ของเดิมไม่มี)
-    document.querySelectorAll("#productTable tbody tr").forEach(row=>{
-        row.addEventListener("click", function(){
-            this.classList.toggle("selected");
-        });
+    // ✅ FIX: click แล้วไม่ไปชน input/button
+    document.addEventListener("click", function(e){
+
+        if(e.target.closest("button") || e.target.tagName==="INPUT") return;
+
+        let row = e.target.closest("#productTable tbody tr");
+        if(row){
+            row.classList.toggle("selected");
+        }
     });
 
     barcodeInput.addEventListener("keydown", function(e){
@@ -236,7 +239,6 @@ document.addEventListener("DOMContentLoaded", function(){
             }
 
             if(scannedBarcodes.has(fullCode)){
-                alert("Barcode ซ้ำ: " + fullCode);
                 barcodeInput.value="";
                 return;
             }
@@ -269,7 +271,7 @@ document.addEventListener("DOMContentLoaded", function(){
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
                 },
-                body: "barcode=" + fullCode + "&warehouse={{warehouse}}"
+                body: "barcode=" + encodeURIComponent(fullCode) + "&warehouse={{warehouse}}"
             })
             .then(res => res.json())
             .then(data => {
@@ -293,19 +295,12 @@ document.addEventListener("DOMContentLoaded", function(){
                     if(act>inv)   row.classList.add("over");
 
                 }
-                else if(data.status === "duplicate"){
-                    alert("Barcode นี้ถูกสแกนแล้วในระบบ");
-                }
-                else{
-                    alert("ไม่พบข้อมูลในระบบ");
-                }
 
                 barcodeInput.value="";
                 barcodeInput.focus();
 
             })
             .catch(()=>{
-                alert("เกิดข้อผิดพลาดในการบันทึก");
                 barcodeInput.value="";
                 barcodeInput.focus();
             });
@@ -318,8 +313,7 @@ document.addEventListener("DOMContentLoaded", function(){
 
 function addWarehouse(){
 
-    let name=document.getElementById("newWarehouse")
-              .value.trim();
+    let name=document.getElementById("newWarehouse").value.trim();
 
     if(name===""){
         alert("กรุณาใส่ชื่อ Warehouse");
@@ -336,10 +330,7 @@ function addWarehouse(){
     .then(res=>res.json())
     .then(data=>{
         if(data.success){
-            alert("เพิ่ม Warehouse สำเร็จ");
             location.reload();
-        }else{
-            alert("เพิ่มไม่สำเร็จ");
         }
     });
 }
@@ -366,7 +357,10 @@ function deleteSelected(){
         },
         body:JSON.stringify({ids:ids})
     })
-    .then(()=>location.reload());
+    .then(()=>{
+        location.reload(); // ✅ FIX: รีเฟรชแบบไม่ค้าง
+    });
+
 }
 
 </script>
