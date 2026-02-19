@@ -17,6 +17,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 # ---------------- DB ---------------- #
 
+
 def get_connection():
     database_url = os.environ.get("DATABASE_URL")
 
@@ -104,6 +105,7 @@ def get_products(warehouse):
     return rows
 
 
+
 # ---------------- ROUTES ---------------- #
 
 @app.route("/")
@@ -111,15 +113,11 @@ def index():
     try:
         warehouses = get_warehouses()
     except Exception as e:
-        return "Database waking up... refresh in a few seconds"
+        print("DB ERROR:", e)
+        return "OK"
 
     if not warehouses:
-        return render_template(
-            "warehouse.html",
-            warehouses=[],
-            warehouse="",
-            products=[]
-        )
+        return "OK"
 
     return redirect(f"/warehouse/{warehouses[0]}")
 
