@@ -28,8 +28,8 @@ def get_connection():
         password=result.password,
         host=result.hostname,
         port=result.port,
-        connect_timeout=5,   # ✅ กันค้าง
-        sslmode="require"    # ✅ สำคัญมากบน Render
+        connect_timeout=5,
+        sslmode="require"
     )
 
 
@@ -69,13 +69,21 @@ def init_db():
     conn.close()
 
 
-# ✅ FIX สำคัญ: init ทุก request กัน DB หลุด
+# ✅ FIX: แค่ wake DB ไม่ต้อง init ทุกครั้ง
 @app.before_request
 def before_request():
     try:
-        init_db()
+        conn = get_connection()
+        conn.close()
     except Exception as e:
-        print("INIT ERROR:", e)
+        print("DB WAKE ERROR:", e)
+
+
+# ✅ กัน cache ค้าง
+@app.after_request
+def add_header(response):
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 # ---------------- FUNCTIONS ---------------- #
@@ -231,8 +239,9 @@ def scan():
                 INSERT INTO scans (full_barcode, warehouse)
                 VALUES (%s,%s)
             """, (barcode, warehouse))
-        except:
+        except Exception as e:
             conn.close()
+            print("SCAN INSERT ERROR:", e)
             return jsonify({"status": "duplicate"})
 
         new_act = act + 1
@@ -269,7 +278,10 @@ def delete_selected():
         conn = get_connection()
         c = conn.cursor()
 
-        c.execute("DELETE FROM products WHERE id = ANY(%s)", (ids,))
+        c.execute(
+            "DELETE FROM products WHERE id = ANY(%s::int[])",
+            (ids,)
+        )
 
         conn.commit()
         conn.close()
@@ -318,5 +330,6 @@ def export_excel(warehouse):
 # ---------------- RUN ---------------- #
 
 if __name__ == "__main__":
+    init_db()  # ✅ รันครั้งเดียวพอ
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
