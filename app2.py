@@ -4,7 +4,7 @@ import os
 import psycopg2
 from psycopg2 import pool, OperationalError
 from urllib.parse import urlparse
-
+import gc
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
@@ -144,6 +144,11 @@ def get_products(warehouse):
     finally:
         release_connection(conn)
 
+
+@app.after_request
+def after_request(response):
+    gc.collect()
+    return response
 
 # ================= ROUTES ================= #
 
