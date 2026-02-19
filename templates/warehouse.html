@@ -1,373 +1,206 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Haier Warehouse Scanner System</title>
+<title>Warehouse</title>
 
 <style>
-body{
-    margin:0;
-    font-family:Segoe UI, Arial;
-    background:#dfe3e8;
+body {
+    margin: 0;
+    font-family: Arial;
 }
-.topbar{
-    background:#0b5fa5;
-    color:white;
-    padding:12px 20px;
-    display:flex;
-    align-items:center;
+
+.header {
+    background: #1f5f99;
+    color: white;
+    padding: 15px;
+    font-size: 22px;
 }
-.logo{
-    font-size:34px;
-    font-weight:bold;
-    margin-right:20px;
+
+.container {
+    display: flex;
 }
-.company{
-    font-size:16px;
+
+.sidebar {
+    width: 300px;
+    padding: 15px;
+    border-right: 1px solid #ccc;
 }
-.main{
-    display:flex;
-    padding:20px;
+
+.main {
+    flex: 1;
+    padding: 15px;
 }
-.left{
-    width:380px;
+
+table {
+    width: 100%;
+    border-collapse: collapse;
 }
-.card{
-    background:#efefef;
-    padding:20px;
-    margin-bottom:20px;
-    border:1px solid #bcbcbc;
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: center;
 }
-select{
-    width:100%;
-    padding:8px;
-    margin-top:10px;
-    font-size:14px;
+
+.complete {
+    background: #90ee90;
 }
-input[type=text]{
-    width:100%;
-    padding:10px;
-    font-size:16px;
-    margin-top:10px;
-    border:1px solid #aaa;
+
+.over {
+    background: #ff9999;
 }
-.readonly{
-    background:#d9dee5;
-}
-.btn{
-    padding:8px 14px;
-    border:none;
-    color:white;
-    font-weight:bold;
-    cursor:pointer;
-    margin-right:10px;
-}
-.btn-blue{ background:#148ea1; }
-.btn-red{ background:#d62f2f; }
-.btn-green{ background:#2ea043; }
-.btn-add{ background:#2f5bd6; width:100%; margin-top:10px; }
-.right{
-    flex:1;
-    background:#efefef;
-    padding:10px;
-    border:1px solid #bcbcbc;
-    height:650px;
-    overflow:auto;
-}
-table{
-    width:100%;
-    border-collapse:collapse;
-    background:white;
-}
-th,td{
-    border:1px solid #ccc;
-    padding:6px;
-    text-align:center;
-    font-size:13px;
-}
-th{
-    background:#d0d5db;
-    font-weight:bold;
-}
-tr:hover{
-    background:#f1f7ff;
-}
-.complete{
-    background:#c6f6c6 !important;
-}
-.over{
-    background:#ffc9c9 !important;
-}
-.selected{
-    background:#ffd966 !important;
+
+button {
+    margin-top: 10px;
+    padding: 8px;
 }
 </style>
+
 </head>
 
 <body>
 
-<div class="topbar">
-    <div class="logo">Haier</div>
-    <div class="company">
-        บริษัท ไฮเออร์ อีเล็คทริค (ประเทศไทย) จำกัด (มหาชน)
-    </div>
+<div class="header">
+    Haier
 </div>
 
-<div class="main">
+<div class="container">
 
-<div class="left">
+    <!-- LEFT -->
+    <div class="sidebar">
 
-<div class="card">
-    <b>Select Warehouse</b>
-    <form action="/" method="GET">
-        <select onchange="location.href='/warehouse/'+this.value">
-            {% for w in warehouses %}
-            <option value="{{w}}" {% if w==warehouse %}selected{% endif %}>
-                {{w}}
-            </option>
-            {% endfor %}
+        <h3>Select Warehouse</h3>
+        <select id="warehouseSelect">
+            <option value="{{warehouse}}">{{warehouse}}</option>
         </select>
-    </form>
 
-    <br><br>
-    <input type="text" id="newWarehouse" placeholder="New Warehouse">
-    <button class="btn btn-add" onclick="addWarehouse()">Add Warehouse</button>
-</div>
+        <h3>Original Model Code</h3>
+        <input type="text" id="barcodeInput" autofocus style="width:100%; padding:8px;">
 
-<div class="card">
-    <b>Original Model Code</b>
-    <input type="text" id="barcode" autofocus>
+        <h3>Model Code (9 digit)</h3>
+        <input type="text" id="modelCode" readonly style="width:100%; padding:8px;">
 
-    <br><br>
-    <b>Model Code (9 digit)</b>
-    <input type="text" id="model" class="readonly" readonly>
+        <h3>Select Location</h3>
+        <input type="text" id="locationInput" value="{{warehouse}}" readonly style="width:100%; padding:8px;">
 
-    <br><br>
-    <b>Select Location</b>
-    <input type="text" id="scanLocation">
-</div>
+        <br>
 
-<div style="margin-top:10px;">
+        <button>Import</button>
+        <button>Export Excel</button>
 
-    <form action="{{ url_for('import_excel', warehouse=warehouse) }}"
-      method="POST"
-      enctype="multipart/form-data"
-      style="display:inline;">
+    </div>
 
-        <input type="file" name="file" required>
-        <button class="btn btn-blue">Import</button>
-    </form>
+    <!-- RIGHT -->
+    <div class="main">
 
-    <button class="btn btn-red" onclick="deleteSelected()">
-        Delete Selected
-    </button>
+        <table>
+            <thead>
+                <tr>
+                    <th>NO.</th>
+                    <th>Location</th>
+                    <th>Model Code</th>
+                    <th>Description</th>
+                    <th>Inv.Qty</th>
+                    <th>Act.Qty</th>
+                </tr>
+            </thead>
 
-    <button class="btn btn-green"
-        onclick="window.location='/export/{{warehouse}}'">
-        Export Excel
-    </button>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>{{loop.index}}</td>
+                    <td>{{row[0]}}</td>
+                    <td>{{row[1]}}</td>
+                    <td>{{row[2]}}</td>
+                    <td class="inv">{{row[3]}}</td>
+                    <td class="act">{{row[4]}}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
 
-</div>
-</div>
+        </table>
 
-<div class="right">
+    </div>
 
-<table id="productTable">
-<thead>
-<tr>
-<th>NO.</th>
-<th>Location</th>
-<th>Model Code</th>
-<th>Product description</th>
-<th>Inv.Qty</th>
-<th>Act.Qty</th>
-</tr>
-</thead>
-
-<tbody>
-{% for p in products %}
-<tr data-id="{{p[0]}}"
-    data-model="{{p[2]}}"
-    data-location="{{p[1]}}">
-<td>{{loop.index}}</td>
-<td>{{p[1]}}</td>
-<td>{{p[2]}}</td>
-<td>{{p[3]}}</td>
-<td class="inv">{{p[4]}}</td>
-<td class="act">{{p[5]}}</td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
-
-</div>
 </div>
 
 <script>
 
-let scannedBarcodes = new Set();
+const barcodeInput = document.getElementById("barcodeInput");
+const modelCodeInput = document.getElementById("modelCode");
 
-document.addEventListener("DOMContentLoaded", function(){
+barcodeInput.addEventListener("keypress", function(e){
 
-    const barcodeInput = document.getElementById("barcode");
-    const modelInput   = document.getElementById("model");
+    if(e.key === "Enter"){
 
-    if(!barcodeInput || !modelInput) return;
+        let fullCode = barcodeInput.value.trim();
+        if(!fullCode) return;
 
-    document.addEventListener("click", function(e){
-        if(e.target.closest("button") || e.target.tagName==="INPUT") return;
+        // 🔥 ใช้ตรง (ไม่ตัด)
+        let modelCode = fullCode;
 
-        let row = e.target.closest("#productTable tbody tr");
-        if(row){
-            row.classList.toggle("selected");
+        modelCodeInput.value = modelCode;
+
+        let location = document.getElementById("locationInput").value;
+
+        if(!location){
+            alert("❌ กรุณาเลือก Location");
+            return;
         }
-    });
 
-    barcodeInput.addEventListener("keydown", function(e){
-
-        if(e.key === "Enter"){
-
-            e.preventDefault();
-
-            let fullCode = barcodeInput.value.trim().toUpperCase();
-
-            if(fullCode.length < 9){
-                barcodeInput.value="";
-                return;
-            }
-
-            let scanLocation =
-                document.getElementById("scanLocation")
-                .value.trim().toUpperCase();
-
-            if(scanLocation===""){
-                alert("กรุณาใส่ Location ก่อนสแกน");
-                barcodeInput.value="";
-                return;
-            }
-
-            // ✅ FIX: แจ้งเตือนซ้ำ
-            if(scannedBarcodes.has(fullCode)){
-                alert("บาร์โค้ดซ้ำ!");
-                barcodeInput.value="";
-                barcodeInput.focus();
-                return;
-            }
-
-            let modelCode = fullCode.substring(0,9);
-            modelInput.value = modelCode;
-
-            let row = document.querySelector(
-                "tr[data-model='"+modelCode+"'][data-location='"+scanLocation+"']"
-            );
-
-            if(!row){
-                alert("ไม่พบ Model นี้ใน Location ที่เลือก");
-                barcodeInput.value="";
-                return;
-            }
-
-            fetch("/scan", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded"
-                },
-                body: "barcode=" + encodeURIComponent(fullCode) + "&warehouse={{warehouse}}"
+        fetch("/scan", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model_code: modelCode,
+                location: location
             })
-            .then(res => res.json())
-            .then(data => {
+        })
+        .then(res => res.json())
+        .then(data => {
 
-                if(data.status === "duplicate"){
-                    alert("บาร์โค้ดนี้ถูกสแกนไปแล้วในระบบ!");
-                }
+            if(data.status === "duplicate"){
+                alert(data.message);
+            }
 
-                if(data.status === "success"){
+            else if(data.status === "success"){
 
-                    scannedBarcodes.add(fullCode);
+                let rows = document.querySelectorAll("tbody tr");
 
+                rows.forEach(row => {
+
+                    let modelCell = row.children[2]; // 🔥 สำคัญ
                     let actCell = row.querySelector(".act");
                     let invCell = row.querySelector(".inv");
 
-                    let act = parseInt(actCell.innerText)||0;
-                    let inv = parseInt(invCell.innerText)||0;
+                    if(modelCell.innerText.trim() === modelCode){
 
-                    act++;
-                    actCell.innerText = act;
+                        let act = parseInt(actCell.innerText) || 0;
+                        let inv = parseInt(invCell.innerText) || 0;
 
-                    row.classList.remove("complete","over");
+                        act++;
+                        actCell.innerText = act;
 
-                    if(act===inv) row.classList.add("complete");
-                    if(act>inv)   row.classList.add("over");
-                }
+                        row.classList.remove("complete","over");
 
-                barcodeInput.value="";
-                barcodeInput.focus();
+                        if(act === inv) row.classList.add("complete");
+                        if(act > inv) row.classList.add("over");
+                    }
+                });
+            }
 
-            })
-            .catch(()=>{
-                alert("เกิดข้อผิดพลาดในการส่งข้อมูล");
-                barcodeInput.value="";
-                barcodeInput.focus();
-            });
+            else{
+                alert(data.message);
+            }
 
-        }
-
-    });
-
+            barcodeInput.value="";
+            barcodeInput.focus();
+        });
+    }
 });
-
-
-function addWarehouse(){
-
-    let name=document.getElementById("newWarehouse").value.trim();
-
-    if(name===""){
-        alert("กรุณาใส่ชื่อ Warehouse");
-        return;
-    }
-
-    fetch("/add_warehouse",{
-        method:"POST",
-        headers:{
-            "Content-Type":"application/json"
-        },
-        body:JSON.stringify({name:name})
-    })
-    .then(res=>res.json())
-    .then(data=>{
-        if(data.success){
-            location.reload();
-        }
-    });
-}
-
-function deleteSelected(){
-
-    let rows=document.querySelectorAll("tr.selected");
-
-    if(rows.length===0){
-        alert("No rows selected");
-        return;
-    }
-
-    let ids=[];
-
-    rows.forEach(r=>{
-        ids.push(r.getAttribute("data-id"));
-    });
-
-    fetch("/delete_selected",{
-        method:"POST",
-        headers:{
-            "Content-Type":"application/json"
-        },
-        body:JSON.stringify({ids:ids})
-    })
-    .then(()=>{
-        location.reload(); // ✅ FIX: รีเฟรชแบบไม่ค้าง
-    });
-
-}
 
 </script>
 
