@@ -253,60 +253,52 @@ def import_excel(warehouse):
 
 # -------- SCAN -------- #
 
-@app.route("/scan", methods=["POST"])
+@app.route('/scan', methods=['POST'])
 def scan():
-    conn = get_connection()
+    data = request.get_json()
+
+    model_code = data.get('model_code')
+    location = data.get('location')
+
+    if not location:
+        return jsonify({"status": "error", "message": "กรุณาเลือก location"})
+
     try:
-        barcode = request.form.get("barcode")
-        warehouse = request.form.get("warehouse")
-
-        if not barcode:
-            return jsonify({"status": "not_found"})
-
-        model = barcode[:9].upper()
-
+        conn = get_connection()
         cur = conn.cursor()
 
+        # ✅ เช็คซ้ำ
         cur.execute("""
-            SELECT id, act_qty
-            FROM products
-            WHERE model=%s AND warehouse=%s
-        """, (model, warehouse))
+            SELECT 1 FROM stock
+            WHERE model_code = %s AND location = %s
+        """, (model_code, location))
 
-        row = cur.fetchone()
+        exists = cur.fetchone()
 
-        if not row:
-            return jsonify({"status": "not_found"})
+        if exists:
+            # 🔥 อันนี้แหละที่หายไป
+            return jsonify({
+                "status": "duplicate",
+                "message": "❌ บาร์โค้ดนี้มีใน location นี้แล้ว"
+            })
 
-        product_id, act = row
-
-        # ✅ ไม่ใช้ exception แล้ว
+        # ✅ insert ถ้าไม่ซ้ำ
         cur.execute("""
-            INSERT INTO scans (full_barcode, warehouse)
-            VALUES (%s,%s)
-            ON CONFLICT DO NOTHING
-        """, (barcode, warehouse))
-
-        if cur.rowcount == 0:
-            return jsonify({"status": "duplicate"})
-
-        new_act = act + 1
-
-        cur.execute("""
-            UPDATE products
-            SET act_qty=%s
-            WHERE id=%s
-        """, (new_act, product_id))
+            INSERT INTO stock (model_code, location)
+            VALUES (%s, %s)
+        """, (model_code, location))
 
         conn.commit()
-        return jsonify({"status": "success"})
+
+        return jsonify({
+            "status": "success",
+            "message": "✅ บันทึกสำเร็จ"
+        })
 
     except Exception as e:
-        conn.rollback()
-        print("SCAN ERROR:", e)
-        return jsonify({"status": "error"})
-    finally:
-        release_connection(conn)
+        return jsonify({"status": "error", "message": str(e)})
+
+
 
 
 # -------- DELETE -------- #
