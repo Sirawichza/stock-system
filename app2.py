@@ -66,44 +66,51 @@ def release_connection(conn):
 
 
 def init_db():
-    conn = get_connection()
+    global db_pool
+
+    print("🟢 INIT DB")
+
+    conn = None
+    cur = None
+
     try:
-        c = conn.cursor()
+        # ✅ ใช้ connection จาก pool โดยตรง (สำคัญมาก)
+        conn = db_pool.getconn()
+        cur = conn.cursor()
 
-        c.execute("""
-        CREATE TABLE IF NOT EXISTS warehouses (
-            id SERIAL PRIMARY KEY,
-            name TEXT UNIQUE
-        )
-        """)
+        # =========================
+        # 🔽 ใส่ TABLE เดิมของคุณตรงนี้
+        # (ห้ามเรียก get_connection())
+        # =========================
 
-        c.execute("""
+        cur.execute("""
         CREATE TABLE IF NOT EXISTS products (
             id SERIAL PRIMARY KEY,
-            warehouse TEXT,
             location TEXT,
             model TEXT,
             description TEXT,
-            inv_qty INTEGER,
+            inv_qty INTEGER DEFAULT 0,
             act_qty INTEGER DEFAULT 0
         )
         """)
 
-        c.execute("""
-        CREATE TABLE IF NOT EXISTS scans (
-            id SERIAL PRIMARY KEY,
-            full_barcode TEXT,
-            warehouse TEXT,
-            UNIQUE(full_barcode, warehouse)
-        )
-        """)
+        # 👉 ถ้ามี table อื่น ใส่ต่อได้เลย เช่น:
+        # cur.execute("""CREATE TABLE IF NOT EXISTS ...""")
 
         conn.commit()
+
     except Exception as e:
-        conn.rollback()
-        print("INIT DB ERROR:", e)
+        print("❌ INIT DB ERROR:", e)
+
     finally:
-        release_connection(conn)
+        # ✅ ปิด cursor
+        if cur:
+            cur.close()
+
+        # ✅ คืน connection กลับ pool
+        if conn:
+            db_pool.putconn(conn)
+
 
 
 # ✅ wake DB (เบาๆ ไม่สร้าง connection ค้าง)
