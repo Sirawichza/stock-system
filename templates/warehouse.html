@@ -257,33 +257,38 @@ document.addEventListener("DOMContentLoaded", function(){
             );
 
             if(!row){
-  	  if (confirm("ไม่พบ Model นี้\n\nกด OK = ปิด\nกด Cancel = บันทึกใหม่")) {
-      	       // กด OK → ไม่ทำอะไร
-   	  } else {
-      	       // 🔥 กด Save Data
-     	       fetch("/add_new_barcode", {
+
+    	 if (confirm("ไม่พบ Model นี้\n\nกด OK = ปิด\nกด Cancel = บันทึกใหม่")) {
+        	     // 👉 กด OK = ไม่ทำอะไร
+                   barcodeInput.value="";
+                   return;
+            } 
+            else {
+                 // 👉 กด Cancel = บันทึกข้อมูลใหม่
+                fetch("/add_new_barcode", {
                      method: "POST",
                      headers: {"Content-Type": "application/json"},
                      body: JSON.stringify({
                             barcode: fullCode,
                             warehouse: "{{warehouse}}",
                             location: scanLocation
-                      })
-                   })
-                   .then(res => res.json())
-                   .then(res => {
-                         if (res.success) {
-                            alert("✅ บันทึกสำเร็จ");
-                            location.reload();
-                         } else {
-                             alert("❌ บันทึกไม่สำเร็จ");
-                         }
-                   });
-              }
+                     })
+                })
+                .then(res => res.json())
+                .then(res => {
+                     if (res.success) {
+                        alert("✅ บันทึกสำเร็จ");
+                        location.reload();
+                     } else {
+                         alert("❌ บันทึกไม่สำเร็จ");
+                     }
+                });
+            }
 
-    barcodeInput.value="";
-    return;
-}
+            barcodeInput.value="";
+            return;   // 🔥 สำคัญ: กันโค้ดด้านล่างทำงานต่อ
+       }
+
 
 
             const controller = new AbortController();

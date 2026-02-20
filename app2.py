@@ -344,37 +344,34 @@ def add_new_barcode():
         warehouse = data.get("warehouse")
         location = data.get("location")
 
-        if not barcode:
+        if not barcode or not location:
             return jsonify({"success": False})
 
         model = barcode[:9].upper()
 
         cur = conn.cursor()
 
-        # 🔍 เช็คว่ามีอยู่แล้วไหม
+        # 🔍 เช็คแบบมี location ด้วย
         cur.execute("""
-            SELECT id, inv_qty
+            SELECT id, inv_qty, act_qty
             FROM products
-            WHERE model=%s AND warehouse=%s
-        """, (model, warehouse))
+            WHERE model=%s AND warehouse=%s AND location=%s
+        """, (model, warehouse, location))
 
         row = cur.fetchone()
 
         if row:
-            # 👉 มีอยู่แล้ว → บวกเพิ่ม
-            product_id, inv_qty = row
-
-            new_qty = (inv_qty or 0) + 1
+            # 👉 มี row นี้อยู่แล้ว → บวก Act.Qty อย่างเดียว
+            product_id, inv_qty, act_qty = row
 
             cur.execute("""
                 UPDATE products
-                SET inv_qty=%s,
-                    act_qty=%s
+                SET act_qty = act_qty + 1
                 WHERE id=%s
-            """, (new_qty, new_qty, product_id))
+            """, (product_id,))
 
         else:
-            # 👉 ยังไม่มี → สร้างใหม่
+            # 👉 ไม่มี → สร้างใหม่
             cur.execute("""
                 INSERT INTO products
                 (warehouse, location, model, description, inv_qty, act_qty)
@@ -396,6 +393,7 @@ def add_new_barcode():
 
     finally:
         release_connection(conn)
+
 
 
 # ---------------- DELETE ---------------- #
