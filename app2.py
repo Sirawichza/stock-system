@@ -436,11 +436,12 @@ def export_excel(warehouse):
     try:
         c = conn.cursor()
 
+        # ✅ ตัด warehouse ออก (สำคัญมาก)
         c.execute("""
-            SELECT warehouse, location, model, description, inv_qty, act_qty
+            SELECT location, model, description, inv_qty, act_qty
             FROM products WHERE warehouse=%s
+            ORDER BY location, model
         """, (warehouse,))
-
 
         rows = c.fetchall()
 
@@ -455,12 +456,17 @@ def export_excel(warehouse):
         ws.append([])
 
         # 🟢 หัวตาราง
-        ws.append(["Location", "Model Code", "Product description", "Inv.Qty", "Act.Qty"])
+        ws.append([
+            "Location",
+            "Model Code",
+            "Product description",
+            "Inv.Qty",
+            "Act.Qty"
+        ])
 
         # 📦 ข้อมูล
         for row in rows:
             ws.append(row)
-
 
         file_path = os.path.join(UPLOAD_FOLDER, f"{warehouse}_result.xlsx")
         wb.save(file_path)
@@ -474,6 +480,7 @@ def export_excel(warehouse):
 
     finally:
         release_connection(conn)
+
 
 
 # ---------------- RUN ---------------- #
