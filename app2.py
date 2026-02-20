@@ -333,6 +333,70 @@ def scan():
     finally:
         release_connection(conn)
 
+# ---------------- New Barcode ---------------- #
+@app.route("/add_new_barcode", methods=["POST"])
+def add_new_barcode():
+    conn = get_connection()
+    try:
+        data = request.get_json()
+
+        barcode = data.get("barcode")
+        warehouse = data.get("warehouse")
+        location = data.get("location")
+
+        if not barcode:
+            return jsonify({"success": False})
+
+        model = barcode[:9].upper()
+
+        cur = conn.cursor()
+
+        # 🔍 เช็คว่ามีอยู่แล้วไหม
+        cur.execute("""
+            SELECT id, inv_qty
+            FROM products
+            WHERE model=%s AND warehouse=%s
+        """, (model, warehouse))
+
+        row = cur.fetchone()
+
+        if row:
+            # 👉 มีอยู่แล้ว → บวกเพิ่ม
+            product_id, inv_qty = row
+
+            new_qty = (inv_qty or 0) + 1
+
+            cur.execute("""
+                UPDATE products
+                SET inv_qty=%s,
+                    act_qty=%s
+                WHERE id=%s
+            """, (new_qty, new_qty, product_id))
+
+        else:
+            # 👉 ยังไม่มี → สร้างใหม่
+            cur.execute("""
+                INSERT INTO products
+                (warehouse, location, model, description, inv_qty, act_qty)
+                VALUES (%s,%s,%s,%s,1,1)
+            """, (
+                warehouse,
+                location,
+                model,
+                "ไม่มีในฐานข้อมูล"
+            ))
+
+        conn.commit()
+        return jsonify({"success": True})
+
+    except Exception as e:
+        conn.rollback()
+        print("ADD NEW ERROR:", e)
+        return jsonify({"success": False})
+
+    finally:
+        release_connection(conn)
+
 
 # ---------------- DELETE ---------------- #
 @app.route("/delete_selected", methods=["POST"])
