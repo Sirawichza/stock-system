@@ -284,19 +284,22 @@ def scan():
     try:
         barcode = request.form.get("barcode")
         warehouse = request.form.get("warehouse")
+        location = request.form.get("location")   # ✅ เพิ่ม
 
-        if not barcode:
+        if not barcode or not location:
             return jsonify({"status": "not_found"})
 
         model = barcode[:9].upper()
+        location = location.upper()
 
         cur = conn.cursor()
 
+        # ✅ FIX: ใส่ location เข้าไป
         cur.execute("""
             SELECT id
             FROM products
-            WHERE model=%s AND warehouse=%s
-        """, (model, warehouse))
+            WHERE model=%s AND warehouse=%s AND location=%s
+        """, (model, warehouse, location))
 
         row = cur.fetchone()
 
@@ -305,7 +308,7 @@ def scan():
 
         product_id = row[0]
 
-        # ✅ กัน scan ซ้ำ
+        # กันซ้ำ (ยังใช้ได้เหมือนเดิม)
         cur.execute("""
             INSERT INTO scans (full_barcode, warehouse)
             VALUES (%s,%s)
@@ -315,7 +318,7 @@ def scan():
         if cur.rowcount == 0:
             return jsonify({"status": "duplicate"})
 
-        # ✅ FIX สำคัญ: กันค่าพัง
+        # อัปเดตเฉพาะ row ที่ตรง location
         cur.execute("""
             UPDATE products
             SET act_qty = act_qty + 1
