@@ -212,7 +212,6 @@ document.addEventListener("DOMContentLoaded", function(){
     const barcodeInput = document.getElementById("barcode");
     const modelInput   = document.getElementById("model");
 
-    // ✅ click เลือก row (แก้ bug delete ใช้ไม่ได้)
     document.querySelectorAll("#productTable tbody tr")
     .forEach(row => {
         row.addEventListener("click", () => {
@@ -252,57 +251,61 @@ document.addEventListener("DOMContentLoaded", function(){
             let modelCode = fullCode.substring(0,9);
             modelInput.value = modelCode;
 
-            let row = document.querySelector(
-                "tr[data-model='"+modelCode+"'][data-location='"+scanLocation+"']"
+            // ✅ FIX BUG ตรงนี้ (สำคัญมาก)
+            let rows = document.querySelectorAll(
+                "tr[data-model='"+modelCode+"']"
             );
+
+            let row = null;
+
+            rows.forEach(r => {
+                if (r.getAttribute("data-location").toUpperCase() === scanLocation) {
+                    row = r;
+                }
+            });
 
             if(!row){
 
-    	 if (confirm("ไม่พบ Model นี้\n\nกด OK = ปิด\nกด Cancel = บันทึกใหม่")) {
-        	     // 👉 กด OK = ไม่ทำอะไร
-                   barcodeInput.value="";
-                   return;
-            } 
-            else {
-                 // 👉 กด Cancel = บันทึกข้อมูลใหม่
-                fetch("/add_new_barcode", {
-                     method: "POST",
-                     headers: {"Content-Type": "application/json"},
-                     body: JSON.stringify({
+                if (confirm("ไม่พบ Model นี้\n\nกด OK = ปิด\nกด Cancel = บันทึกใหม่")) {
+                    barcodeInput.value="";
+                    return;
+                } 
+                else {
+                    fetch("/add_new_barcode", {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({
                             barcode: fullCode,
                             warehouse: "{{warehouse}}",
                             location: scanLocation
-                     })
-                })
-                .then(res => res.json())
-                .then(res => {
-                     if (res.success) {
-                        alert("✅ บันทึกสำเร็จ");
-                        location.reload();
-                     } else {
-                         alert("❌ บันทึกไม่สำเร็จ");
-                     }
-                });
+                        })
+                    })
+                    .then(res => res.json())
+                    .then(res => {
+                        if (res.success) {
+                            alert("✅ บันทึกสำเร็จ");
+                            location.reload();
+                        } else {
+                            alert("❌ บันทึกไม่สำเร็จ");
+                        }
+                    });
+                }
+
+                barcodeInput.value="";
+                return;
             }
 
-            barcodeInput.value="";
-            return;   // 🔥 สำคัญ: กันโค้ดด้านล่างทำงานต่อ
-       }
-
-
-
             const controller = new AbortController();
-
             setTimeout(() => controller.abort(), 5000);
 
             fetch("/scan", {
-                 method: "POST",
-  	   headers: {
-        	           "Content-Type": "application/x-www-form-urlencoded"
-                 },
-                 body: "barcode=" + fullCode + "&warehouse={{warehouse}}",
-                 signal: controller.signal
-             })
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: "barcode=" + fullCode + "&warehouse={{warehouse}}",
+                signal: controller.signal
+            })
 
             .then(res => res.json())
             .then(data => {
@@ -325,7 +328,6 @@ document.addEventListener("DOMContentLoaded", function(){
                     if(act===inv) row.classList.add("complete");
                     if(act>inv)   row.classList.add("over");
 
-                    // 🔊 เสียงแจ้งเตือน
                     new Audio("https://www.soundjay.com/buttons/sounds/beep-01a.mp3").play();
                 }
                 else if(data.status === "duplicate"){
@@ -340,15 +342,14 @@ document.addEventListener("DOMContentLoaded", function(){
 
             })
             .catch((err)=>{
-   	   if (err.name === "AbortError") {
-        	       alert("เซิร์ฟเวอร์ตอบช้า (timeout)");
-                 } else {
-                     alert("เกิดข้อผิดพลาดในการบันทึก");
-                 }
-                 barcodeInput.value="";
-                 barcodeInput.focus();
+                if (err.name === "AbortError") {
+                    alert("เซิร์ฟเวอร์ตอบช้า (timeout)");
+                } else {
+                    alert("เกิดข้อผิดพลาดในการบันทึก");
+                }
+                barcodeInput.value="";
+                barcodeInput.focus();
             });
-
 
         }
 
