@@ -303,7 +303,9 @@ document.addEventListener("DOMContentLoaded", function(){
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
                 },
-                body: "barcode=" + fullCode + "&warehouse={{warehouse}}",
+                body: "barcode=" + fullCode +
+    	           "&warehouse={{warehouse}}" +
+                         "&location=" + scanLocation,
                 signal: controller.signal
             })
 
