@@ -5,7 +5,7 @@ import psycopg2
 from psycopg2 import pool
 from urllib.parse import urlparse
 import uuid
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Font
 import io
 
 db_initialized = False
@@ -454,14 +454,13 @@ def export_excel(warehouse):
     """, (warehouse,))
     rows = cur.fetchall()
 
-
-
     wb = Workbook()
     ws = wb.active
 
     # ===== HEADER =====
     ws["A1"] = "Warehouse"
     ws["B1"] = warehouse
+
     ws["A1"].font = Font(bold=True, size=14)
     ws["B1"].font = Font(bold=True, size=14)
 
@@ -470,11 +469,16 @@ def export_excel(warehouse):
     headers = ["Location", "Model Code", "Product description", "Inv.Qty", "Act.Qty", "Remark"]
     ws.append(headers)
 
-    # ทำ header หนา + ใหญ่
     for col in range(1, 7):
         ws.cell(row=3, column=col).font = Font(bold=True, size=12)
 
     # ===== สี =====
+    yellow_fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+
+    red_font = Font(color="FF0000")
+    green_font = Font(color="008000")
+
+    # ===== prefix color =====
     prefix_colors = {}
     color_list = ["E6E6FA", "E0FFFF", "E6FFE6", "FFF0E6", "FFE6F0"]
     color_index = 0
@@ -487,7 +491,7 @@ def export_excel(warehouse):
 
         prefix = location[:4]
 
-        # ===== FIX DESCRIPTION =====
+        # ===== FIX DESC =====
         if not desc or desc.strip() == "" or desc == "ไม่มีในฐานข้อมูล":
 
             cur.execute("""
@@ -509,48 +513,39 @@ def export_excel(warehouse):
         if is_add:
             remark = "ADD"
         else:
-            if inv_qty > act_qty:
-                remark = "Not Match"
-            elif inv_qty < act_qty:
-                remark = "Not Match"
-            else:
+            if inv_qty == act_qty:
                 remark = "Matching"
+            else:
+                remark = "Not Match"
 
         ws.append([location, model, desc, inv_qty, act_qty, remark])
         r = ws.max_row
 
-        # ===== ADD = เหลืองทั้งแถว =====
-        if is_add:
-            add_fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+        # ===== สี prefix (พื้นหลัง location) =====
+        if prefix not in prefix_colors:
+            prefix_colors[prefix] = color_list[color_index % len(color_list)]
+            color_index += 1
+
+        loc_fill = PatternFill(
+            start_color=prefix_colors[prefix],
+            end_color=prefix_colors[prefix],
+            fill_type="solid"
+        )
+
+        ws.cell(row=r, column=1).fill = loc_fill
+
+        # ===== ADD (เหลืองทั้งแถว) =====
+        if remark == "ADD":
             for col in range(1, 7):
-                ws.cell(row=r, column=col).fill = add_fill
+                ws.cell(row=r, column=col).fill = yellow_fill
 
-        else:
-            # ===== สีตาม PREFIX =====
-            if prefix not in prefix_colors:
-                prefix_colors[prefix] = color_list[color_index % len(color_list)]
-                color_index += 1
+        # ===== Matching (ตัวเขียว) =====
+        elif remark == "Matching":
+            ws.cell(row=r, column=6).font = green_font
 
-            loc_fill = PatternFill(
-                start_color=prefix_colors[prefix],
-                end_color=prefix_colors[prefix],
-                fill_type="solid"
-            )
-
-            for col in range(1, 7):
-                ws.cell(row=r, column=col).fill = loc_fill
-
-        # ===== สีตัวหนังสือ Remark =====
-        remark_cell = ws.cell(row=r, column=6)
-
-        if remark == "Matching":
-            remark_cell.font = Font(color="008000")  # เขียว
-
+        # ===== Not Match (ตัวแดง) =====
         elif remark == "Not Match":
-            remark_cell.font = Font(color="FF0000")  # แดง
-
-        elif remark == "ADD":
-            remark_cell.font = Font(bold=True)
+            ws.cell(row=r, column=6).font = red_font
 
     cur.close()
     release_connection(conn)
@@ -560,9 +555,11 @@ def export_excel(warehouse):
     wb.save(output)
     output.seek(0)
 
-    return send_file(output,
-                     download_name=f"{warehouse}.xlsx",
-                     as_attachment=True)
+    return send_file(
+        output,
+        download_name=f"{warehouse}.xlsx",
+        as_attachment=True
+    )
 
 
 
