@@ -442,97 +442,127 @@ def delete_selected():
 # ---------------- EXPORT ---------------- #
 @app.route("/export/<warehouse>")
 def export_excel(warehouse):
-   
 
-    conn = get_db_connection()
+    conn = get_connection()
     cur = conn.cursor()
 
-    # ===== ดึงข้อมูล =====
     cur.execute("""
-        SELECT location, model, product_desc, inv_qty, act_qty
+        SELECT location, model, description, inv_qty, act_qty
         FROM products
         WHERE warehouse=%s
         ORDER BY location, model
     """, (warehouse,))
     rows = cur.fetchall()
 
-    # ===== สร้าง Workbook =====
+
+
     wb = Workbook()
     ws = wb.active
 
-    # ===== HEADER TOP =====
+    # ===== HEADER =====
     ws["A1"] = "Warehouse"
     ws["B1"] = warehouse
     ws["A1"].font = Font(bold=True, size=14)
     ws["B1"].font = Font(bold=True, size=14)
 
-    # ===== HEADER TABLE =====
+    ws.append([])
+
     headers = ["Location", "Model Code", "Product description", "Inv.Qty", "Act.Qty", "Remark"]
     ws.append(headers)
 
-    for col in ws[2]:
-        col.font = Font(bold=True, size=14)
+    # ทำ header หนา + ใหญ่
+    for col in range(1, 7):
+        ws.cell(row=3, column=col).font = Font(bold=True, size=12)
 
     # ===== สี =====
-    yellow_fill = PatternFill(start_color="FFF59D", end_color="FFF59D", fill_type="solid")
-
-    font_green = Font(color="008000", bold=True)
-    font_red   = Font(color="FF0000", bold=True)
-
-    # ===== สร้าง map หา description จาก model =====
-    model_map = {}
-    for row in rows:
-        model = row[1]
-        desc  = row[2]
-
-        if desc and desc.strip() != "" and "ไม่มีในฐานข้อมูล" not in desc:
-            if model not in model_map:
-                model_map[model] = desc
+    prefix_colors = {}
+    color_list = ["E6E6FA", "E0FFFF", "E6FFE6", "FFF0E6", "FFE6F0"]
+    color_index = 0
 
     # ===== LOOP =====
     for row in rows:
+
         location, model, desc, inv_qty, act_qty = row
+        is_add = False
 
-        # 🔥 เติม description ถ้าไม่มี
-        if not desc or desc.strip() == "" or "ไม่มีในฐานข้อมูล" in desc:
-            desc = model_map.get(model, "")
+        prefix = location[:4]
 
-        # ===== logic =====
-        if inv_qty == act_qty:
-            remark = "Matching"
-        elif inv_qty == 0 and act_qty > 0:
+        # ===== FIX DESCRIPTION =====
+        if not desc or desc.strip() == "" or desc == "ไม่มีในฐานข้อมูล":
+
+            cur.execute("""
+                SELECT description FROM products
+                WHERE model=%s
+                AND description IS NOT NULL
+                AND description != 'ไม่มีในฐานข้อมูล'
+                LIMIT 1
+            """, (model,))
+            found = cur.fetchone()
+
+            if found:
+                desc = found[0]
+                is_add = True
+            else:
+                desc = "-"
+
+        # ===== LOGIC =====
+        if is_add:
             remark = "ADD"
         else:
-            remark = "Not Match"
+            if inv_qty > act_qty:
+                remark = "Not Match"
+            elif inv_qty < act_qty:
+                remark = "Not Match"
+            else:
+                remark = "Matching"
 
         ws.append([location, model, desc, inv_qty, act_qty, remark])
         r = ws.max_row
 
-        # ===== style =====
-        if remark == "ADD":
-            # เหลืองทั้งแถว
+        # ===== ADD = เหลืองทั้งแถว =====
+        if is_add:
+            add_fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
             for col in range(1, 7):
-                ws.cell(row=r, column=col).fill = yellow_fill
+                ws.cell(row=r, column=col).fill = add_fill
 
-        elif remark == "Matching":
-            ws.cell(row=r, column=6).font = font_green
+        else:
+            # ===== สีตาม PREFIX =====
+            if prefix not in prefix_colors:
+                prefix_colors[prefix] = color_list[color_index % len(color_list)]
+                color_index += 1
+
+            loc_fill = PatternFill(
+                start_color=prefix_colors[prefix],
+                end_color=prefix_colors[prefix],
+                fill_type="solid"
+            )
+
+            for col in range(1, 7):
+                ws.cell(row=r, column=col).fill = loc_fill
+
+        # ===== สีตัวหนังสือ Remark =====
+        remark_cell = ws.cell(row=r, column=6)
+
+        if remark == "Matching":
+            remark_cell.font = Font(color="008000")  # เขียว
 
         elif remark == "Not Match":
-            ws.cell(row=r, column=6).font = font_red
+            remark_cell.font = Font(color="FF0000")  # แดง
+
+        elif remark == "ADD":
+            remark_cell.font = Font(bold=True)
 
     cur.close()
-    conn.close()
+    release_connection(conn)
 
     # ===== SAVE =====
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
 
-    return send_file(
-        output,
-        download_name=f"{warehouse}.xlsx",
-        as_attachment=True
-    )
+    return send_file(output,
+                     download_name=f"{warehouse}.xlsx",
+                     as_attachment=True)
 
 
 
