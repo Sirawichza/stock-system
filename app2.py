@@ -477,6 +477,10 @@ def export_excel(warehouse):
 
     red_font = Font(color="FF0000")
     green_font = Font(color="008000")
+    # ===== สี Act.Qty =====
+    act_red_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
+    act_yellow_fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+    act_green_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
 
     # ===== prefix color =====
     prefix_colors = {}
@@ -534,6 +538,18 @@ def export_excel(warehouse):
 
         for col in range(1, 6):
             ws.cell(row=r, column=col).fill = loc_fill
+
+        # ===== ไฮไลท์ Act.Qty =====
+        act_cell = ws.cell(row=r, column=5)
+
+        if inv_qty > act_qty:
+        act_cell.fill = act_red_fill
+
+        elif inv_qty < act_qty:
+        act_cell.fill = act_yellow_fill
+
+        else:  # เท่ากัน
+        act_cell.fill = act_green_fill
 
         # ===== ADD (เหลืองทั้งแถว) =====
         if remark == "ADD":
