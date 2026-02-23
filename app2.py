@@ -474,22 +474,16 @@ def export_excel(warehouse):
 
     # ===== สี =====
     yellow_fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+    white_fill  = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
 
-    red_font = Font(color="FF0000")
+    red_font   = Font(color="FF0000")
     green_font = Font(color="008000")
-
-    # ===== prefix color =====
-    prefix_colors = {}
-    color_list = ["E6E6FA", "E0FFFF", "E6FFE6", "FFF0E6", "FFE6F0"]
-    color_index = 0
 
     # ===== LOOP =====
     for row in rows:
 
         location, model, desc, inv_qty, act_qty = row
         is_add = False
-
-        prefix = location[:4]
 
         # ===== FIX DESC =====
         if not desc or desc.strip() == "" or desc == "ไม่มีในฐานข้อมูล":
@@ -521,29 +515,20 @@ def export_excel(warehouse):
         ws.append([location, model, desc, inv_qty, act_qty, remark])
         r = ws.max_row
 
-        # ===== สี prefix (พื้นหลัง location) =====
-        if prefix not in prefix_colors:
-            prefix_colors[prefix] = color_list[color_index % len(color_list)]
-            color_index += 1
+        # ===== พื้นขาวทั้งแถว (default) =====
+        for col in range(1, 7):
+            ws.cell(row=r, column=col).fill = white_fill
 
-        loc_fill = PatternFill(
-            start_color=prefix_colors[prefix],
-            end_color=prefix_colors[prefix],
-            fill_type="solid"
-        )
-
-        ws.cell(row=r, column=1).fill = loc_fill
-
-        # ===== ADD (เหลืองทั้งแถว) =====
+        # ===== ADD = เหลืองทั้งแถว =====
         if remark == "ADD":
             for col in range(1, 7):
                 ws.cell(row=r, column=col).fill = yellow_fill
 
-        # ===== Matching (ตัวเขียว) =====
+        # ===== Matching = ตัวเขียว =====
         elif remark == "Matching":
             ws.cell(row=r, column=6).font = green_font
 
-        # ===== Not Match (ตัวแดง) =====
+        # ===== Not Match = ตัวแดง =====
         elif remark == "Not Match":
             ws.cell(row=r, column=6).font = red_font
 
