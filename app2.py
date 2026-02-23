@@ -443,7 +443,7 @@ def delete_selected():
 @app.route("/export/<warehouse>")
 def export_excel(warehouse):
 
-    conn = get_connection()   # ❗ ใช้ตัวเดิมของคุณ ไม่ใช่ get_db_connection
+    conn = get_connection()
     cur = conn.cursor()
 
     cur.execute("""
@@ -460,10 +460,9 @@ def export_excel(warehouse):
     # ===== HEADER =====
     ws["A1"] = "Warehouse"
     ws["B1"] = warehouse
-
     ws.append([])
 
-    headers = ["Location", "Model Code", "Product description", "Inv.Qty", "Act.Qty", "Remarks"]
+    headers = ["Location", "Model Code", "Product description", "Inv.Qty", "Act.Qty", "Remark"]
     ws.append(headers)
 
     # ===== สี =====
@@ -471,9 +470,10 @@ def export_excel(warehouse):
     yellow_fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
     green_fill  = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
 
-    # สี Location (โทนอ่อน)
-    location_colors = {}
+    # ===== สีตาม PREFIX (KB1G / KB1F) =====
+    prefix_colors = {}
     color_list = ["E6E6FA", "E0FFFF", "E6FFE6", "FFF0E6", "FFE6F0"]
+
     color_index = 0
 
     # ===== LOOP =====
@@ -482,23 +482,27 @@ def export_excel(warehouse):
         location, model, desc, inv_qty, act_qty = row
         is_add = False
 
-        # ===== หา desc ถ้าไม่มี =====
+        prefix = location[:4]  # 🔥 เอา KB1G / KB1F
+
+        # ===== FIX DESC =====
         if not desc or desc.strip() == "" or desc == "ไม่มีในฐานข้อมูล":
 
             cur.execute("""
                 SELECT description FROM products
-                WHERE model=%s AND description IS NOT NULL
+                WHERE model=%s
+                AND description IS NOT NULL
+                AND description != 'ไม่มีในฐานข้อมูล'
                 LIMIT 1
             """, (model,))
             found = cur.fetchone()
 
-            if found and found[0]:
+            if found:
                 desc = found[0]
                 is_add = True
             else:
-                desc = "ไม่มีในฐานข้อมูล"
+                desc = "-"  # ไม่มีจริง
 
-        # ===== Logic =====
+        # ===== LOGIC =====
         if is_add:
             remark = "ADD"
             qty_fill = yellow_fill
@@ -519,30 +523,31 @@ def export_excel(warehouse):
         ws.append([location, model, desc, inv_qty, act_qty, remark])
         r = ws.max_row
 
-        # ===== สี Location =====
-        if location not in location_colors:
-            location_colors[location] = color_list[color_index % len(color_list)]
+        # ===== สี PREFIX =====
+        if prefix not in prefix_colors:
+            prefix_colors[prefix] = color_list[color_index % len(color_list)]
             color_index += 1
 
         loc_fill = PatternFill(
-            start_color=location_colors[location],
-            end_color=location_colors[location],
+            start_color=prefix_colors[prefix],
+            end_color=prefix_colors[prefix],
             fill_type="solid"
         )
 
         for col in range(1, 7):
             ws.cell(row=r, column=col).fill = loc_fill
 
-        # ===== Highlight ADD =====
+        # ===== ADD highlight =====
         if is_add:
             ws.cell(row=r, column=2).fill = yellow_fill
             ws.cell(row=r, column=3).fill = yellow_fill
+            ws.cell(row=r, column=5).fill = yellow_fill
 
         # ===== Highlight Act.Qty =====
         ws.cell(row=r, column=5).fill = qty_fill
 
     cur.close()
-    release_connection(conn)   # ❗ สำคัญ (อย่าใช้ conn.close())
+    release_connection(conn)
 
     # ===== SAVE =====
     output = io.BytesIO()
