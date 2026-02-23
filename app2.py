@@ -5,6 +5,8 @@ import psycopg2
 from psycopg2 import pool
 from urllib.parse import urlparse
 import uuid
+from openpyxl.styles import PatternFill
+import io
 
 db_initialized = False
 
@@ -440,54 +442,116 @@ def delete_selected():
 # ---------------- EXPORT ---------------- #
 @app.route("/export/<warehouse>")
 def export_excel(warehouse):
-    conn = get_connection()
-    try:
-        c = conn.cursor()
 
-        # ✅ ตัด warehouse ออก (สำคัญมาก)
-        c.execute("""
-            SELECT location, model, description, inv_qty, act_qty
-            FROM products WHERE warehouse=%s
-            ORDER BY location, model
-        """, (warehouse,))
+    conn = get_connection()   # ❗ ใช้ตัวเดิมของคุณ ไม่ใช่ get_db_connection
+    cur = conn.cursor()
 
-        rows = c.fetchall()
+    cur.execute("""
+        SELECT location, model, description, inv_qty, act_qty
+        FROM products
+        WHERE warehouse=%s
+        ORDER BY location, model
+    """, (warehouse,))
+    rows = cur.fetchall()
 
-        wb = Workbook()
-        ws = wb.active
+    wb = Workbook()
+    ws = wb.active
 
-        # 🔵 หัวรายงาน
-        ws["A1"] = "Warehouse"
-        ws["B1"] = warehouse
+    # ===== HEADER =====
+    ws["A1"] = "Warehouse"
+    ws["B1"] = warehouse
 
-        # 🔵 เว้นบรรทัด
-        ws.append([])
+    ws.append([])
 
-        # 🟢 หัวตาราง
-        ws.append([
-            "Location",
-            "Model Code",
-            "Product description",
-            "Inv.Qty",
-            "Act.Qty"
-        ])
+    headers = ["Location", "Model Code", "Product description", "Inv.Qty", "Act.Qty", "Remarks"]
+    ws.append(headers)
 
-        # 📦 ข้อมูล
-        for row in rows:
-            ws.append(row)
+    # ===== สี =====
+    red_fill    = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
+    yellow_fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+    green_fill  = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
 
-        file_path = os.path.join(UPLOAD_FOLDER, f"{warehouse}_result.xlsx")
-        wb.save(file_path)
+    # สี Location (โทนอ่อน)
+    location_colors = {}
+    color_list = ["E6E6FA", "E0FFFF", "E6FFE6", "FFF0E6", "FFE6F0"]
+    color_index = 0
 
-        return send_file(file_path, as_attachment=True)
+    # ===== LOOP =====
+    for row in rows:
 
-    except Exception as e:
-        conn.rollback()
-        print("EXPORT ERROR:", e)
-        return "EXPORT FAIL"
+        location, model, desc, inv_qty, act_qty = row
+        is_add = False
 
-    finally:
-        release_connection(conn)
+        # ===== หา desc ถ้าไม่มี =====
+        if not desc or desc.strip() == "" or desc == "ไม่มีในฐานข้อมูล":
+
+            cur.execute("""
+                SELECT description FROM products
+                WHERE model=%s AND description IS NOT NULL
+                LIMIT 1
+            """, (model,))
+            found = cur.fetchone()
+
+            if found and found[0]:
+                desc = found[0]
+                is_add = True
+            else:
+                desc = "ไม่มีในฐานข้อมูล"
+
+        # ===== Logic =====
+        if is_add:
+            remark = "ADD"
+            qty_fill = yellow_fill
+
+        else:
+            if inv_qty > act_qty:
+                remark = "Not Match"
+                qty_fill = red_fill
+
+            elif inv_qty < act_qty:
+                remark = "Not Match"
+                qty_fill = yellow_fill
+
+            else:
+                remark = "Matching"
+                qty_fill = green_fill
+
+        ws.append([location, model, desc, inv_qty, act_qty, remark])
+        r = ws.max_row
+
+        # ===== สี Location =====
+        if location not in location_colors:
+            location_colors[location] = color_list[color_index % len(color_list)]
+            color_index += 1
+
+        loc_fill = PatternFill(
+            start_color=location_colors[location],
+            end_color=location_colors[location],
+            fill_type="solid"
+        )
+
+        for col in range(1, 7):
+            ws.cell(row=r, column=col).fill = loc_fill
+
+        # ===== Highlight ADD =====
+        if is_add:
+            ws.cell(row=r, column=2).fill = yellow_fill
+            ws.cell(row=r, column=3).fill = yellow_fill
+
+        # ===== Highlight Act.Qty =====
+        ws.cell(row=r, column=5).fill = qty_fill
+
+    cur.close()
+    release_connection(conn)   # ❗ สำคัญ (อย่าใช้ conn.close())
+
+    # ===== SAVE =====
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(output,
+                     download_name=f"{warehouse}.xlsx",
+                     as_attachment=True)
 
 
 
