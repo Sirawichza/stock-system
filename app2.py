@@ -543,13 +543,13 @@ def export_excel(warehouse):
         act_cell = ws.cell(row=r, column=5)
 
         if inv_qty > act_qty:
-        act_cell.fill = act_red_fill
+            act_cell.fill = act_red_fill
 
         elif inv_qty < act_qty:
-        act_cell.fill = act_yellow_fill
+            act_cell.fill = act_yellow_fill
 
         else:  # เท่ากัน
-        act_cell.fill = act_green_fill
+            act_cell.fill = act_green_fill
 
         # ===== ADD (เหลืองทั้งแถว) =====
         if remark == "ADD":
